@@ -70,7 +70,11 @@ typedef struct {
 
     uint32_t        *scaled_pixels;
     int              scaled_cap;
-    APTR             render_mutex;
+    struct BitMap   *src_bm;
+    struct BitMap   *comp_bm;
+    int              comp_w;
+    int              comp_h;
+    bool             comp_dirty;
 
     TtxFavorite      favs[TTX_MAX_FAVS];
     int              fav_count;

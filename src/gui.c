@@ -10,10 +10,15 @@
 #include <proto/dos.h>
 #include <proto/intuition.h>
 #include <proto/graphics.h>
+#include <proto/layers.h>
 #include <proto/utility.h>
 #include <proto/chooser.h>
 #include <proto/listbrowser.h>
 #include <proto/requester.h>
+
+#include <graphics/gfx.h>
+#include <graphics/layers.h>
+#include <graphics/composite.h>
 
 #include <classes/window.h>
 #include <classes/requester.h>
@@ -72,13 +77,15 @@ static void show_info_requester(struct Window *win, const char *title, const cha
     }
 }
 
-static void get_canvas_draw_rect(TtxApp *app, int *out_x, int *out_y, int *out_w, int *out_h,
+static void get_canvas_draw_rect(TtxApp *app, Object *space_obj,
+                                 int *out_x, int *out_y, int *out_w, int *out_h,
                                  struct IBox *out_box) {
     struct IBox box;
     memset(&box, 0, sizeof(box));
-    if (app->gadgets[GID_CANVAS]) {
+    Object *obj = space_obj ? space_obj : app->gadgets[GID_CANVAS];
+    if (obj) {
         struct IBox *ib = NULL;
-        IIntuition->GetAttr(SPACE_AreaBox, app->gadgets[GID_CANVAS], (ULONG *)&ib);
+        IIntuition->GetAttr(SPACE_AreaBox, obj, (ULONG *)&ib);
         if (ib) box = *ib;
     }
     if (out_box) *out_box = box;
@@ -201,12 +208,73 @@ static void scale_framebuffer_rows(const uint32_t *src, int src_stride,
     }
 }
 
-static void gui_redraw_canvas_rp(TtxApp *app, struct RastPort *rp) {
-    if (!app || !rp || !app->gadgets[GID_CANVAS]) return;
+typedef struct {
+    struct BitMap *srcBitMap;
+    uint32         srcWidth;
+    uint32         srcHeight;
+    int32          offsetX;
+    int32          offsetY;
+    int32          scaleX;
+    int32          scaleY;
+    uint32         flags;
+    uint32         retCode;
+} TtxCompositeHookData;
+
+static ULONG composite_hook_func(struct Hook *hook, struct RastPort *rastPort, struct BackFillMessage *msg) {
+    TtxCompositeHookData *hd = (TtxCompositeHookData *)hook->h_Data;
+    if (!hd || !rastPort || !rastPort->BitMap || !msg) {
+        return 0;
+    }
+
+    hd->retCode = IGraphics->CompositeTags(
+        COMPOSITE_Src_Over_Dest,
+        hd->srcBitMap,
+        rastPort->BitMap,
+        COMPTAG_SrcWidth,   hd->srcWidth,
+        COMPTAG_SrcHeight,  hd->srcHeight,
+        COMPTAG_ScaleX,     hd->scaleX,
+        COMPTAG_ScaleY,     hd->scaleY,
+        COMPTAG_OffsetX,    msg->Bounds.MinX - (msg->OffsetX - hd->offsetX),
+        COMPTAG_OffsetY,    msg->Bounds.MinY - (msg->OffsetY - hd->offsetY),
+        COMPTAG_DestX,      msg->Bounds.MinX,
+        COMPTAG_DestY,      msg->Bounds.MinY,
+        COMPTAG_DestWidth,  msg->Bounds.MaxX - msg->Bounds.MinX + 1,
+        COMPTAG_DestHeight, msg->Bounds.MaxY - msg->Bounds.MinY + 1,
+        COMPTAG_Flags,      hd->flags,
+        TAG_DONE);
+
+    return 0;
+}
+
+static void sync_canvas_bitmap(TtxApp *app) {
+    if (!app || !app->src_bm) return;
+    struct RastPort srp;
+    IGraphics->InitRastPort(&srp);
+    srp.BitMap = app->src_bm;
+    IGraphics->WritePixelArray(
+        (APTR)app->renderer.pixels,
+        0, 0,
+        TTX_FB_W * 4,
+        PIXF_A8R8G8B8,
+        &srp,
+        0, 0,
+        TTX_FB_W, TTX_FB_H
+    );
+    app->comp_dirty = true;
+}
+
+static void gui_redraw_canvas_rp(TtxApp *app, Object *space_obj, struct RastPort *rp, bool allow_alloc) {
+    if (!app || !rp) return;
     struct IBox box;
     int off_x, off_y, draw_w, draw_h;
-    get_canvas_draw_rect(app, &off_x, &off_y, &draw_w, &draw_h, &box);
+    get_canvas_draw_rect(app, space_obj, &off_x, &off_y, &draw_w, &draw_h, &box);
     if (draw_w < 16 || draw_h < 16) return;
+
+    if (!app->src_bm) {
+        IGraphics->SetAPen(rp, 0);
+        IGraphics->RectFill(rp, box.Left, box.Top, box.Left + box.Width - 1, box.Top + box.Height - 1);
+        return;
+    }
 
     /* Clear border around centered teletext screen if larger */
     if (box.Width > draw_w || box.Height > draw_h) {
@@ -224,52 +292,121 @@ static void gui_redraw_canvas_rp(TtxApp *app, struct RastPort *rp) {
     int sx, sy, sw, sh;
     get_zoom_src_rect(app, &sx, &sy, &sw, &sh);
 
-    if (sx == 0 && sy == 0 && sw == TTX_FB_W && sh == TTX_FB_H &&
-        draw_w == TTX_FB_W && draw_h == TTX_FB_H) {
-        IGraphics->WritePixelArray(
-            (APTR)app->renderer.pixels,
-            0, 0,
-            TTX_FB_W * 4,
-            PIXF_A8R8G8B8,
-            rp,
-            off_x, off_y,
-            draw_w, draw_h
-        );
-    } else {
-        if (!app->scaled_pixels || app->scaled_cap < draw_w) return;
-        int strip_h = app->scaled_cap / draw_w;
-        if (strip_h < 1) strip_h = 1;
+    /* 1:1 fast hardware blit */
+    if (sw == draw_w && sh == draw_h) {
+        IGraphics->BltBitMapRastPort(
+            app->src_bm, sx, sy,
+            rp, off_x, off_y,
+            draw_w, draw_h, 0xC0);
+        return;
+    }
 
-        if (app->render_mutex) IExec->MutexObtain(app->render_mutex);
-        for (int dy = 0; dy < draw_h; dy += strip_h) {
-            int ch = draw_h - dy;
-            if (ch > strip_h) ch = strip_h;
+    /* Primary Hardware/OS-Composited scaling directly into window layer via DoHookClipRects:
+     * Zero heap allocations, zero mutexes, layer-clipped and safe inside SPACE_RenderHook */
+    if (rp->Layer && rp->BitMap) {
+        struct Rectangle rect;
+        rect.MinX = off_x;
+        rect.MinY = off_y;
+        rect.MaxX = off_x + draw_w - 1;
+        rect.MaxY = off_y + draw_h - 1;
+
+        int32 scale_x = COMP_FLOAT_TO_FIX((float)draw_w / (float)sw);
+        int32 scale_y = COMP_FLOAT_TO_FIX((float)draw_h / (float)sh);
+        int32 origin_x = off_x - (int32)(((float)sx * (float)draw_w) / (float)sw + 0.5f);
+        int32 origin_y = off_y - (int32)(((float)sy * (float)draw_h) / (float)sh + 0.5f);
+
+        TtxCompositeHookData hookData;
+        hookData.srcBitMap = app->src_bm;
+        hookData.srcWidth  = TTX_FB_W;
+        hookData.srcHeight = TTX_FB_H;
+        hookData.offsetX   = origin_x;
+        hookData.offsetY   = origin_y;
+        hookData.scaleX    = scale_x;
+        hookData.scaleY    = scale_y;
+        hookData.flags     = COMPFLAG_IgnoreDestAlpha | COMPFLAG_SrcFilter;
+        hookData.retCode   = COMPERR_Success;
+
+        struct Hook hook;
+        memset(&hook, 0, sizeof(hook));
+        hook.h_Entry = (HOOKFUNC)composite_hook_func;
+        hook.h_Data  = &hookData;
+
+        ILayers->DoHookClipRects(&hook, rp, &rect);
+        if (hookData.retCode == COMPERR_Success) {
+            return;
+        }
+    }
+
+    /* Fallback for drivers without CompositeTags: maintain offscreen scaled BitMap only in main task */
+    if (allow_alloc) {
+        if (!app->comp_bm || app->comp_w != draw_w || app->comp_h != draw_h) {
+            if (app->comp_bm) {
+                IGraphics->FreeBitMap(app->comp_bm);
+                app->comp_bm = NULL;
+            }
+            struct BitMap *friend_bm = (app->win && app->win->RPort) ? app->win->RPort->BitMap : NULL;
+            app->comp_bm = IGraphics->AllocBitMapTags(
+                (uint32)draw_w, (uint32)draw_h, 32,
+                BMATags_PixelFormat, PIXF_A8R8G8B8,
+                BMATags_Displayable, TRUE,
+                BMATags_Friend,      friend_bm,
+                TAG_DONE);
+            app->comp_w = app->comp_bm ? draw_w : 0;
+            app->comp_h = app->comp_bm ? draw_h : 0;
+            app->comp_dirty = true;
+        }
+        int needed = draw_w * draw_h;
+        if (app->comp_bm && needed > app->scaled_cap) {
+            uint32_t *nb = (uint32_t *)realloc(app->scaled_pixels, (size_t)needed * sizeof(uint32_t));
+            if (nb) {
+                app->scaled_pixels = nb;
+                app->scaled_cap = needed;
+            }
+        }
+        if (app->comp_bm && app->scaled_pixels && app->scaled_cap >= needed && app->comp_dirty) {
             scale_framebuffer_rows(app->renderer.pixels, TTX_FB_W,
                                    sx, sy, sw, sh,
                                    app->scaled_pixels, draw_w, draw_h,
-                                   dy, ch);
+                                   0, draw_h);
+            struct RastPort crp;
+            IGraphics->InitRastPort(&crp);
+            crp.BitMap = app->comp_bm;
             IGraphics->WritePixelArray(
                 (APTR)app->scaled_pixels,
                 0, 0,
                 draw_w * 4,
                 PIXF_A8R8G8B8,
-                rp,
-                off_x, off_y + dy,
-                draw_w, ch
+                &crp,
+                0, 0,
+                draw_w, draw_h
             );
+            app->comp_dirty = false;
         }
-        if (app->render_mutex) IExec->MutexRelease(app->render_mutex);
+    }
+
+    if (app->comp_bm && app->comp_w == draw_w && app->comp_h == draw_h) {
+        IGraphics->BltBitMapRastPort(
+            app->comp_bm, 0, 0,
+            rp, off_x, off_y,
+            draw_w, draw_h, 0xC0);
+    } else {
+        int cw = (sw < draw_w) ? sw : draw_w;
+        int ch = (sh < draw_h) ? sh : draw_h;
+        IGraphics->BltBitMapRastPort(
+            app->src_bm, sx, sy,
+            rp, off_x, off_y,
+            cw, ch, 0xC0);
     }
 }
 
 static void gui_redraw_canvas(TtxApp *app) {
     if (!app->win) return;
-    gui_redraw_canvas_rp(app, app->win->RPort);
+    gui_redraw_canvas_rp(app, app->gadgets[GID_CANVAS], app->win->RPort, true);
 }
 
 static bool canvas_hit_test(TtxApp *app, int mx, int my, int *out_row, int *out_col) {
     int off_x, off_y, draw_w, draw_h;
-    get_canvas_draw_rect(app, &off_x, &off_y, &draw_w, &draw_h, NULL);
+    get_canvas_draw_rect(app, app->gadgets[GID_CANVAS], &off_x, &off_y, &draw_w, &draw_h, NULL);
     if (draw_w <= 0 || draw_h <= 0) return false;
     int rx = mx - off_x;
     int ry = my - off_y;
@@ -310,7 +447,7 @@ static void gui_update_status(TtxApp *app) {
 static void apply_mouse_wheel_zoom(TtxApp *app, int steps, int mx, int my) {
     if (!app->win || steps == 0) return;
     int off_x, off_y, draw_w, draw_h;
-    get_canvas_draw_rect(app, &off_x, &off_y, &draw_w, &draw_h, NULL);
+    get_canvas_draw_rect(app, app->gadgets[GID_CANVAS], &off_x, &off_y, &draw_w, &draw_h, NULL);
     if (draw_w <= 0 || draw_h <= 0) return;
     if (mx < off_x || my < off_y || mx >= off_x + draw_w || my >= off_y + draw_h) return;
 
@@ -335,6 +472,7 @@ static void apply_mouse_wheel_zoom(TtxApp *app, int steps, int mx, int my) {
 
     int sx, sy, sw, sh;
     get_zoom_src_rect(app, &sx, &sy, &sw, &sh);
+    app->comp_dirty = true;
     gui_redraw_canvas(app);
     gui_update_status(app);
 }
@@ -404,6 +542,7 @@ void gui_load_page(TtxApp *app, int channel_idx, int page, int subpage,
 
     app->renderer.hover_link = 0;
     ttx_render_page(&app->renderer, &app->cur_page);
+    sync_canvas_bitmap(app);
     gui_sync_controls(app);
     gui_redraw_canvas(app);
     gui_update_status(app);
@@ -712,10 +851,9 @@ static struct Hook s_idcmp_hook;
 static struct Hook s_space_render_hook;
 
 static uint32 space_render_func(struct Hook *hook, Object *space_obj, struct gpRender *gpr) {
-    (void)space_obj;
     TtxApp *app = (TtxApp *)hook->h_Data;
     if (!app || !gpr || !gpr->gpr_RPort) return 0;
-    gui_redraw_canvas_rp(app, gpr->gpr_RPort);
+    gui_redraw_canvas_rp(app, space_obj, gpr->gpr_RPort, false);
     return 0;
 }
 
@@ -759,12 +897,7 @@ static void gui_handle_digit(TtxApp *app, int digit) {
 bool gui_init(TtxApp *app) {
     memset(app, 0, sizeof(*app));
     app->zoom_pct = 100;
-    app->render_mutex = IExec->AllocSysObjectTags(ASOT_MUTEX, TAG_DONE);
-    app->scaled_cap = 262144; /* 1 MB fixed strip buffer: safe inside SPACE_RenderHook */
-    app->scaled_pixels = (uint32_t *)malloc((size_t)app->scaled_cap * sizeof(uint32_t));
-    if (!app->scaled_pixels) {
-        app->scaled_cap = 0;
-    }
+    app->comp_dirty = true;
     ttx_cache_init();
     ttx_render_init(&app->renderer);
     prefs_load(&app->prefs);
@@ -797,17 +930,21 @@ bool gui_init(TtxApp *app) {
         WA_Height,         600,
         WA_MinWidth,       420,
         WA_MinHeight,      500,
+        WA_MaxWidth,       ~0UL,
+        WA_MaxHeight,      ~0UL,
         WA_DragBar,        TRUE,
         WA_DepthGadget,    TRUE,
         WA_SizeGadget,     TRUE,
         WA_CloseGadget,    TRUE,
+        WA_SmartRefresh,   TRUE,
+        WA_AutoAdjust,     TRUE,
         WA_Activate,       TRUE,
         WA_NewLookMenus,   TRUE,
         WA_ReportMouse,    TRUE,
         WA_IDCMP,          IDCMP_CLOSEWINDOW | IDCMP_MENUPICK | IDCMP_GADGETUP |
                            IDCMP_RAWKEY | IDCMP_VANILLAKEY | IDCMP_MOUSEBUTTONS |
                            IDCMP_MOUSEMOVE | IDCMP_EXTENDEDMOUSE | IDCMP_INTUITICKS |
-                           IDCMP_NEWSIZE | IDCMP_REFRESHWINDOW,
+                           IDCMP_NEWSIZE,
         WINDOW_IDCMPHook,     (ULONG)&s_idcmp_hook,
         WINDOW_IDCMPHookBits, IDCMP_EXTENDEDMOUSE,
         WINDOW_Position,   WPOS_CENTERSCREEN,
@@ -925,6 +1062,21 @@ bool gui_init(TtxApp *app) {
     app->win = (struct Window *)IIntuition->IDoMethod(app->win_obj, WM_OPEN, NULL);
     if (!app->win) return false;
 
+    struct BitMap *friend_bm = app->win->RPort ? app->win->RPort->BitMap : NULL;
+    app->src_bm = IGraphics->AllocBitMapTags(
+        TTX_FB_W, TTX_FB_H, 32,
+        BMATags_PixelFormat, PIXF_A8R8G8B8,
+        BMATags_Displayable, TRUE,
+        BMATags_Friend,      friend_bm,
+        TAG_DONE);
+    if (!app->src_bm) {
+        app->src_bm = IGraphics->AllocBitMapTags(
+            TTX_FB_W, TTX_FB_H, 32,
+            BMATags_PixelFormat, PIXF_A8R8G8B8,
+            BMATags_Displayable, TRUE,
+            TAG_DONE);
+    }
+
     app->running = true;
     gui_load_page(app, app->prefs.default_channel, app->prefs.default_page, 1, false, false);
     return true;
@@ -943,14 +1095,20 @@ void gui_cleanup(TtxApp *app) {
         app->win = NULL;
     }
 
+    if (app->comp_bm) {
+        IGraphics->FreeBitMap(app->comp_bm);
+        app->comp_bm = NULL;
+        app->comp_w = 0;
+        app->comp_h = 0;
+    }
+    if (app->src_bm) {
+        IGraphics->FreeBitMap(app->src_bm);
+        app->src_bm = NULL;
+    }
     if (app->scaled_pixels) {
         free(app->scaled_pixels);
         app->scaled_pixels = NULL;
         app->scaled_cap = 0;
-    }
-    if (app->render_mutex) {
-        IExec->FreeSysObject(ASOT_MUTEX, app->render_mutex);
-        app->render_mutex = NULL;
     }
 
     struct Node *n;
@@ -1017,23 +1175,27 @@ static void handle_menu(TtxApp *app, ULONG mid) {
             app->renderer.reveal = !app->renderer.reveal;
             app->prefs.reveal_mode = app->renderer.reveal;
             ttx_render_page(&app->renderer, &app->cur_page);
+            sync_canvas_bitmap(app);
             gui_redraw_canvas(app);
             break;
         case MID_FUNC_FLASH:
             app->prefs.flash_enabled = !app->prefs.flash_enabled;
             if (!app->prefs.flash_enabled) app->renderer.flash_on = true;
             ttx_render_page(&app->renderer, &app->cur_page);
+            sync_canvas_bitmap(app);
             gui_redraw_canvas(app);
             break;
         case MID_FUNC_FIT_WIDTH:
             app->prefs.fit_width = !app->prefs.fit_width;
             prefs_save(&app->prefs);
+            app->comp_dirty = true;
             gui_redraw_canvas(app);
             break;
         case MID_FUNC_ZOOM_RESET:
             app->zoom_pct = 100;
             app->view_x = 0;
             app->view_y = 0;
+            app->comp_dirty = true;
             gui_redraw_canvas(app);
             gui_update_status(app);
             break;
@@ -1064,6 +1226,7 @@ void gui_run_loop(TtxApp *app) {
                     break;
 
                 case WMHI_NEWSIZE:
+                    app->comp_dirty = true;
                     gui_redraw_canvas(app);
                     break;
 
@@ -1157,6 +1320,7 @@ void gui_run_loop(TtxApp *app) {
                         if (new_hl != app->renderer.hover_link) {
                             app->renderer.hover_link = new_hl;
                             ttx_render_page(&app->renderer, &app->cur_page);
+                            sync_canvas_bitmap(app);
                             gui_redraw_canvas(app);
                             gui_update_status(app);
                         }
@@ -1245,6 +1409,7 @@ void gui_run_loop(TtxApp *app) {
                             app->tick_count = 0;
                             app->renderer.flash_on = !app->renderer.flash_on;
                             ttx_render_page(&app->renderer, &app->cur_page);
+                            sync_canvas_bitmap(app);
                             gui_redraw_canvas(app);
                         }
                     }
