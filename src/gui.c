@@ -808,14 +808,7 @@ static Object *make_btn(ULONG gid, const char *label) {
 }
 
 static struct Hook s_idcmp_hook;
-static struct Hook s_space_render_hook;
 
-static uint32 space_render_func(struct Hook *hook, Object *space_obj, struct gpRender *gpr) {
-    TtxApp *app = (TtxApp *)hook->h_Data;
-    if (!app || !gpr || !gpr->gpr_RPort) return 0;
-    gui_redraw_canvas_rp(app, space_obj, gpr->gpr_RPort, false);
-    return 0;
-}
 
 static uint32 idcmp_hook_func(struct Hook *hook, Object *win_obj, struct IntuiMessage *imsg) {
     (void)win_obj;
@@ -875,8 +868,6 @@ bool gui_init(TtxApp *app) {
     s_idcmp_hook.h_Entry = (HOOKFUNC)idcmp_hook_func;
     s_idcmp_hook.h_Data  = (APTR)app;
 
-    s_space_render_hook.h_Entry = (HOOKFUNC)space_render_func;
-    s_space_render_hook.h_Data  = (APTR)app;
 
     IExec->NewList(&app->chan_list);
     for (int i = 0; i < TTX_MAX_CHANS; i++) {
@@ -924,7 +915,6 @@ bool gui_init(TtxApp *app) {
                 SPACE_MinHeight,   312,
                 SPACE_Transparent, TRUE,
                 SPACE_BevelStyle,  BVS_NONE,
-                SPACE_RenderHook,  (ULONG)&s_space_render_hook,
                 TAG_DONE),
             CHILD_WeightedHeight, 100,
 
@@ -1168,6 +1158,7 @@ void gui_run_loop(TtxApp *app) {
         }
         ULONG result;
         WORD code;
+        bool need_redraw = false;
         while ((result = IIntuition->IDoMethod(app->win_obj, WM_HANDLEINPUT, &code)) != WMHI_LASTMSG) {
             switch (result & WMHI_CLASSMASK) {
                 case WMHI_CLOSEWINDOW:
@@ -1176,7 +1167,7 @@ void gui_run_loop(TtxApp *app) {
 
                 case WMHI_NEWSIZE:
                     app->comp_dirty = true;
-                    gui_redraw_canvas(app);
+                    need_redraw = true;
                     break;
 
                 case WMHI_MENUPICK: {
@@ -1365,6 +1356,9 @@ void gui_run_loop(TtxApp *app) {
                     break;
                 }
             }
+        }
+        if (need_redraw && app->running) {
+            gui_redraw_canvas(app);
         }
         if (app->wheel_delta != 0) {
             int steps = app->wheel_delta;
