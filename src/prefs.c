@@ -22,6 +22,7 @@ void prefs_init_defaults(TtxPrefs *p) {
     p->default_page = 100;
     p->reveal_mode = false;
     p->flash_enabled = true;
+    p->fit_width = true;
     snprintf(p->export_dir, sizeof(p->export_dir), "RAM:");
 }
 
@@ -50,6 +51,8 @@ void prefs_load(TtxPrefs *p) {
             p->reveal_mode = (atoi(val) != 0);
         } else if (strcmp(line, "flash") == 0) {
             p->flash_enabled = (atoi(val) != 0);
+        } else if (strcmp(line, "fit_width") == 0) {
+            p->fit_width = (atoi(val) != 0);
         } else if (strcmp(line, "export_dir") == 0 && val[0]) {
             snprintf(p->export_dir, sizeof(p->export_dir), "%s", val);
         }
@@ -65,6 +68,7 @@ void prefs_save(const TtxPrefs *p) {
     fprintf(f, "page=%d\n", p->default_page);
     fprintf(f, "reveal=%d\n", p->reveal_mode ? 1 : 0);
     fprintf(f, "flash=%d\n", p->flash_enabled ? 1 : 0);
+    fprintf(f, "fit_width=%d\n", p->fit_width ? 1 : 0);
     fprintf(f, "export_dir=%s\n", p->export_dir);
     fclose(f);
 }

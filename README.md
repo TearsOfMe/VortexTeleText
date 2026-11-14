@@ -30,9 +30,10 @@ A native, standalone **Live Teletext Client** for **AmigaOS 4.1 PowerPC** (ReAct
   * **"Seiten Nummer Auswahl" Bar**:
     * Direct page entry field (press `Enter` to load)
     * `Neu laden`: forces a fresh live download from the internet (bypassing the RAM cache)
-    * `Zoom`: toggles between compact (`510 × 600`) and zoomed (`780 × 810`, clamped to screen size)
     * Channel chooser (`ARD`, `ZDF`, `3SAT`, `HR`, `WDR`, `SWR RP`, `SWR BW`, `SR`)
 * **Mouse & Keyboard Shortcuts**:
+  * **Mouse Wheel**: smooth zoom (`100%–300%`) while hovering over the Teletext display (Middle-click or `Amiga+0` resets zoom)
+  * **Fit to Window Width** (`Funktionen -> An Fensterbreite anpassen`): scales the Teletext display to the exact window width (enabled by default, saved in prefs)
   * **Mouse Click**: click any 3-digit page number (`100–899`) directly inside the Teletext page (highlighted on hover)
   * `0–9`: direct 3-digit page entry
   * `+` / `-`: page up / page down
@@ -93,9 +94,10 @@ Ein nativer, eigenständiger **Live-Teletext-Client** für **AmigaOS 4.1 PowerPC
   * **„Seiten Nummer Auswahl“**:
     * Direkteingabefeld für Seitenzahlen (`Enter` lädt die Seite)
     * `Neu laden`: lädt die aktuelle Seite frisch aus dem Internet (umgeht den RAM-Cache)
-    * `Zoom`: schaltet zwischen normaler Fenstergröße (`510 × 600`) und vergrößerter Ansicht (`780 × 810`, an Bildschirmgröße angepasst) um
     * Sender-Auswahl (`ARD`, `ZDF`, `3SAT`, `HR`, `WDR`, `SWR RP`, `SWR BW`, `SR`)
 * **Maus- & Tastatursteuerung**:
+  * **Mausrad**: stufenloser Zoom (`100%–300%`) über der Teletext-Anzeige (Mittelklick oder `Amiga+0` setzt Zoom zurück)
+  * **An Fensterbreite anpassen** (`Funktionen -> An Fensterbreite anpassen`): skaliert die Teletext-Anzeige exakt auf die Fensterbreite (Standard aktiv, gespeichert in Prefs)
   * **Mausklick**: jede 3-stellige Seitenzahl (`100–899`) im Teletext-Bild ist direkt anklickbar (mit Hover-Hervorhebung)
   * `0–9`: direkte 3-stellige Seiteneingabe
   * `+` / `-`: Seite hoch / runter

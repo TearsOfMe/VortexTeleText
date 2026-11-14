@@ -29,7 +29,6 @@ enum {
     GID_BTN_NEXT_SUB,
     GID_STR_PAGE,
     GID_BTN_RELOAD,
-    GID_BTN_ZOOM,
     GID_CHOOSER_CHAN,
     GID_MAX
 };
@@ -49,7 +48,9 @@ enum {
     MID_FUNC_SEARCH,
     MID_FUNC_FAVS,
     MID_FUNC_REVEAL,
-    MID_FUNC_FLASH
+    MID_FUNC_FLASH,
+    MID_FUNC_FIT_WIDTH,
+    MID_FUNC_ZOOM_RESET
 };
 
 typedef struct {
@@ -75,7 +76,12 @@ typedef struct {
     char             num_buf[4];
     int              num_len;
     int              tick_count;
-    bool             zoomed;
+    int              zoom_pct;
+    int              view_x;
+    int              view_y;
+    int              wheel_delta;
+    int              wheel_mx;
+    int              wheel_my;
     char             status_msg[128];
     char             win_title[160];
     bool             running;

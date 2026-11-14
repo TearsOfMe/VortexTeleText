@@ -26,6 +26,7 @@
 #include <images/bevel.h>
 #include <libraries/gadtools.h>
 #include <intuition/icclass.h>
+#include <utility/hooks.h>
 
 static struct NewMenu s_menu[] = {
     { NM_TITLE, (STRPTR)"Projekt",              NULL,        0, 0, NULL },
@@ -50,6 +51,9 @@ static struct NewMenu s_menu[] = {
     { NM_ITEM,  (STRPTR)"Favoriten...",         (STRPTR)"B", 0, 0, (APTR)MID_FUNC_FAVS },
     { NM_ITEM,  (STRPTR)"Verdeckten Text (Reveal)", (STRPTR)"H", 0, 0, (APTR)MID_FUNC_REVEAL },
     { NM_ITEM,  (STRPTR)"Blinken umschalten",   NULL,        0, 0, (APTR)MID_FUNC_FLASH },
+    { NM_ITEM,  NM_BARLABEL,                    NULL,        0, 0, NULL },
+    { NM_ITEM,  (STRPTR)"An Fensterbreite anpassen", NULL, CHECKIT | MENUTOGGLE | CHECKED, 0, (APTR)MID_FUNC_FIT_WIDTH },
+    { NM_ITEM,  (STRPTR)"Zoom zuruecksetzen (100%)", (STRPTR)"0", 0, 0, (APTR)MID_FUNC_ZOOM_RESET },
 
     { NM_END, NULL, NULL, 0, 0, NULL }
 };
@@ -86,6 +90,14 @@ static void get_canvas_draw_rect(TtxApp *app, int *out_x, int *out_y, int *out_w
         return;
     }
 
+    if (app->prefs.fit_width) {
+        *out_x = box.Left;
+        *out_y = box.Top;
+        *out_w = box.Width;
+        *out_h = box.Height;
+        return;
+    }
+
     /* Fit 640:500 aspect ratio inside box */
     int draw_w = box.Width;
     int draw_h = (draw_w * TTX_FB_H) / TTX_FB_W;
@@ -102,25 +114,50 @@ static void get_canvas_draw_rect(TtxApp *app, int *out_x, int *out_y, int *out_w
     *out_h = draw_h;
 }
 
-static void scale_framebuffer(const uint32_t *src, int sw, int sh,
-                              uint32_t *dst, int dw, int dh) {
+static void get_zoom_src_rect(TtxApp *app, int *out_sx, int *out_sy, int *out_sw, int *out_sh) {
+    int zp = app->zoom_pct;
+    if (zp < 100) zp = 100;
+    if (zp > 300) zp = 300;
+    int sw = (TTX_FB_W * 100) / zp;
+    int sh = (TTX_FB_H * 100) / zp;
+    if (sw < 64) sw = 64;
+    if (sh < 50) sh = 50;
+    if (sw > TTX_FB_W) sw = TTX_FB_W;
+    if (sh > TTX_FB_H) sh = TTX_FB_H;
+
+    int max_x = TTX_FB_W - sw;
+    int max_y = TTX_FB_H - sh;
+    if (app->view_x < 0) app->view_x = 0;
+    if (app->view_y < 0) app->view_y = 0;
+    if (app->view_x > max_x) app->view_x = max_x;
+    if (app->view_y > max_y) app->view_y = max_y;
+
+    *out_sx = app->view_x;
+    *out_sy = app->view_y;
+    *out_sw = sw;
+    *out_sh = sh;
+}
+
+static void scale_framebuffer_region(const uint32_t *src, int src_stride,
+                                     int sx, int sy, int sw, int sh,
+                                     uint32_t *dst, int dw, int dh) {
     if (dw < sw) {
         /* 4-tap bilinear downscale for crisp thin strokes */
         uint32_t x_step = ((uint32_t)(sw - 1) << 16) / (uint32_t)(dw > 1 ? dw - 1 : 1);
         uint32_t y_step = ((uint32_t)(sh - 1) << 16) / (uint32_t)(dh > 1 ? dh - 1 : 1);
         uint32_t sy_fp = 0;
         for (int y = 0; y < dh; y++) {
-            int y0 = (int)(sy_fp >> 16);
-            int y1 = (y0 + 1 < sh) ? y0 + 1 : y0;
+            int y0 = sy + (int)(sy_fp >> 16);
+            int y1 = (y0 + 1 < sy + sh) ? y0 + 1 : y0;
             uint32_t fy = (sy_fp & 0xFFFF) >> 8;
             uint32_t iy = 256 - fy;
-            const uint32_t *r0 = src + y0 * sw;
-            const uint32_t *r1 = src + y1 * sw;
+            const uint32_t *r0 = src + y0 * src_stride;
+            const uint32_t *r1 = src + y1 * src_stride;
             uint32_t *out_row = dst + y * dw;
             uint32_t sx_fp = 0;
             for (int x = 0; x < dw; x++) {
-                int x0 = (int)(sx_fp >> 16);
-                int x1 = (x0 + 1 < sw) ? x0 + 1 : x0;
+                int x0 = sx + (int)(sx_fp >> 16);
+                int x1 = (x0 + 1 < sx + sw) ? x0 + 1 : x0;
                 uint32_t fx = (sx_fp & 0xFFFF) >> 8;
                 uint32_t ix = 256 - fx;
 
@@ -145,14 +182,14 @@ static void scale_framebuffer(const uint32_t *src, int sw, int sh,
             sy_fp += y_step;
         }
     } else {
-        /* Crisp nearest-neighbor upscale */
+        /* Crisp nearest-neighbor scale */
         for (int y = 0; y < dh; y++) {
-            int sy = (y * sh) / dh;
-            const uint32_t *srow = src + sy * sw;
+            int ry = sy + (y * sh) / dh;
+            const uint32_t *srow = src + ry * src_stride;
             uint32_t *drow = dst + y * dw;
             for (int x = 0; x < dw; x++) {
-                int sx = (x * sw) / dw;
-                drow[x] = srow[sx];
+                int rx = sx + (x * sw) / dw;
+                drow[x] = srow[rx];
             }
         }
     }
@@ -178,7 +215,11 @@ static void gui_redraw_canvas(TtxApp *app) {
             IGraphics->RectFill(app->win->RPort, off_x + draw_w, off_y, box.Left + box.Width - 1, off_y + draw_h - 1);
     }
 
-    if (draw_w == TTX_FB_W && draw_h == TTX_FB_H) {
+    int sx, sy, sw, sh;
+    get_zoom_src_rect(app, &sx, &sy, &sw, &sh);
+
+    if (sx == 0 && sy == 0 && sw == TTX_FB_W && sh == TTX_FB_H &&
+        draw_w == TTX_FB_W && draw_h == TTX_FB_H) {
         IGraphics->WritePixelArray(
             (APTR)app->renderer.pixels,
             0, 0,
@@ -196,8 +237,9 @@ static void gui_redraw_canvas(TtxApp *app) {
             app->scaled_pixels = nb;
             app->scaled_cap = needed;
         }
-        scale_framebuffer(app->renderer.pixels, TTX_FB_W, TTX_FB_H,
-                          app->scaled_pixels, draw_w, draw_h);
+        scale_framebuffer_region(app->renderer.pixels, TTX_FB_W,
+                                 sx, sy, sw, sh,
+                                 app->scaled_pixels, draw_w, draw_h);
         IGraphics->WritePixelArray(
             (APTR)app->scaled_pixels,
             0, 0,
@@ -210,24 +252,76 @@ static void gui_redraw_canvas(TtxApp *app) {
     }
 }
 
+static bool canvas_hit_test(TtxApp *app, int mx, int my, int *out_row, int *out_col) {
+    int off_x, off_y, draw_w, draw_h;
+    get_canvas_draw_rect(app, &off_x, &off_y, &draw_w, &draw_h, NULL);
+    if (draw_w <= 0 || draw_h <= 0) return false;
+    int rx = mx - off_x;
+    int ry = my - off_y;
+    if (rx < 0 || ry < 0 || rx >= draw_w || ry >= draw_h) return false;
+
+    int sx, sy, sw, sh;
+    get_zoom_src_rect(app, &sx, &sy, &sw, &sh);
+    int px = sx + (rx * sw) / draw_w;
+    int py = sy + (ry * sh) / draw_h;
+    return ttx_render_hit_test(px, py, TTX_FB_W, TTX_FB_H, out_row, out_col);
+}
+
 static void gui_update_status(TtxApp *app) {
     if (!app->win) return;
+    char zbuf[24] = "";
+    if (app->zoom_pct > 100) {
+        snprintf(zbuf, sizeof(zbuf), " [Zoom %d%%]", app->zoom_pct);
+    }
     if (app->renderer.hover_link >= 100) {
         snprintf(app->win_title, sizeof(app->win_title),
-                 "VortexTeletext - %s %d (%d/%d) | Klick -> Seite %d",
+                 "VortexTeletext - %s %d (%d/%d)%s | Klick -> Seite %d",
                  g_ttx_channels[app->cur_page.channel_idx].name,
                  app->cur_page.page, app->cur_page.subpage, app->cur_page.total_subpages,
-                 app->renderer.hover_link);
+                 zbuf, app->renderer.hover_link);
     } else if (app->status_msg[0]) {
         snprintf(app->win_title, sizeof(app->win_title),
                  "VortexTeletext - %s", app->status_msg);
     } else {
         snprintf(app->win_title, sizeof(app->win_title),
-                 "VortexTeletext - %s %d (%d/%d)",
+                 "VortexTeletext - %s %d (%d/%d)%s",
                  g_ttx_channels[app->cur_page.channel_idx].name,
-                 app->cur_page.page, app->cur_page.subpage, app->cur_page.total_subpages);
+                 app->cur_page.page, app->cur_page.subpage, app->cur_page.total_subpages,
+                 zbuf);
     }
     IIntuition->SetWindowTitles(app->win, (STRPTR)app->win_title, (STRPTR)-1);
+}
+
+static void apply_mouse_wheel_zoom(TtxApp *app, int steps, int mx, int my) {
+    if (!app->win || steps == 0) return;
+    int off_x, off_y, draw_w, draw_h;
+    get_canvas_draw_rect(app, &off_x, &off_y, &draw_w, &draw_h, NULL);
+    if (draw_w <= 0 || draw_h <= 0) return;
+    if (mx < off_x || my < off_y || mx >= off_x + draw_w || my >= off_y + draw_h) return;
+
+    int old_sx, old_sy, old_sw, old_sh;
+    get_zoom_src_rect(app, &old_sx, &old_sy, &old_sw, &old_sh);
+
+    int rx = mx - off_x;
+    int ry = my - off_y;
+    int focus_x = old_sx + (rx * old_sw) / draw_w;
+    int focus_y = old_sy + (ry * old_sh) / draw_h;
+
+    int new_zp = app->zoom_pct + steps * 10;
+    if (new_zp < 100) new_zp = 100;
+    if (new_zp > 300) new_zp = 300;
+    if (new_zp == app->zoom_pct) return;
+
+    app->zoom_pct = new_zp;
+    int new_sw = (TTX_FB_W * 100) / new_zp;
+    int new_sh = (TTX_FB_H * 100) / new_zp;
+    app->view_x = focus_x - (rx * new_sw) / draw_w;
+    app->view_y = focus_y - (ry * new_sh) / draw_h;
+
+    int sx, sy, sw, sh;
+    get_zoom_src_rect(app, &sx, &sy, &sw, &sh);
+    gui_redraw_canvas(app);
+    gui_update_status(app);
 }
 
 static void gui_update_keypad_display(TtxApp *app, const char *txt) {
@@ -574,26 +668,22 @@ static Object *make_btn(ULONG gid, const char *label) {
         TAG_DONE);
 }
 
-static void gui_toggle_zoom(TtxApp *app) {
-    if (!app->win || !app->win->WScreen) return;
-    app->zoomed = !app->zoomed;
+static struct Hook s_idcmp_hook;
 
-    int scr_w = app->win->WScreen->Width;
-    int scr_h = app->win->WScreen->Height;
-    int target_w = app->zoomed ? 780 : 510;
-    int target_h = app->zoomed ? 810 : 600;
+static uint32 idcmp_hook_func(struct Hook *hook, Object *win_obj, struct IntuiMessage *imsg) {
+    (void)win_obj;
+    TtxApp *app = (TtxApp *)hook->h_Data;
+    if (!app || !imsg) return 0;
 
-    if (target_w > scr_w - 20) target_w = scr_w - 20;
-    if (target_h > scr_h - 30) target_h = scr_h - 30;
-
-    int wx = app->win->LeftEdge;
-    int wy = app->win->TopEdge;
-    if (wx + target_w > scr_w) wx = (scr_w - target_w) / 2;
-    if (wy + target_h > scr_h) wy = (scr_h - target_h) / 2;
-    if (wx < 0) wx = 0;
-    if (wy < 0) wy = 0;
-
-    IIntuition->ChangeWindowBox(app->win, wx, wy, target_w, target_h);
+    if (imsg->Class == IDCMP_EXTENDEDMOUSE && (imsg->Code & IMSGCODE_INTUIWHEELDATA)) {
+        struct IntuiWheelData *wd = (struct IntuiWheelData *)imsg->IAddress;
+        if (wd && wd->WheelY != 0) {
+            app->wheel_delta += (wd->WheelY < 0) ? 1 : -1;
+            app->wheel_mx = imsg->MouseX;
+            app->wheel_my = imsg->MouseY;
+        }
+    }
+    return 0;
 }
 
 static void gui_handle_digit(TtxApp *app, int digit) {
@@ -619,11 +709,23 @@ static void gui_handle_digit(TtxApp *app, int digit) {
 
 bool gui_init(TtxApp *app) {
     memset(app, 0, sizeof(*app));
+    app->zoom_pct = 100;
     ttx_cache_init();
     ttx_render_init(&app->renderer);
     prefs_load(&app->prefs);
     app->renderer.reveal = app->prefs.reveal_mode;
     favs_load(app->favs, &app->fav_count, TTX_MAX_FAVS);
+
+    /* Sync Fit-Width menu checkmark with loaded prefs */
+    for (int i = 0; s_menu[i].nm_Type != NM_END; i++) {
+        if ((ULONG)s_menu[i].nm_UserData == MID_FUNC_FIT_WIDTH) {
+            if (app->prefs.fit_width) s_menu[i].nm_Flags |= CHECKED;
+            else                      s_menu[i].nm_Flags &= (UWORD)~CHECKED;
+        }
+    }
+
+    s_idcmp_hook.h_Entry = (HOOKFUNC)idcmp_hook_func;
+    s_idcmp_hook.h_Data  = (APTR)app;
 
     IExec->NewList(&app->chan_list);
     for (int i = 0; i < TTX_MAX_CHANS; i++) {
@@ -646,7 +748,10 @@ bool gui_init(TtxApp *app) {
         WA_ReportMouse,    TRUE,
         WA_IDCMP,          IDCMP_CLOSEWINDOW | IDCMP_MENUPICK | IDCMP_GADGETUP |
                            IDCMP_RAWKEY | IDCMP_VANILLAKEY | IDCMP_MOUSEBUTTONS |
-                           IDCMP_MOUSEMOVE | IDCMP_INTUITICKS | IDCMP_NEWSIZE | IDCMP_REFRESHWINDOW,
+                           IDCMP_MOUSEMOVE | IDCMP_EXTENDEDMOUSE | IDCMP_INTUITICKS |
+                           IDCMP_NEWSIZE | IDCMP_REFRESHWINDOW,
+        WINDOW_IDCMPHook,     (ULONG)&s_idcmp_hook,
+        WINDOW_IDCMPHookBits, IDCMP_EXTENDEDMOUSE,
         WINDOW_Position,   WPOS_CENTERSCREEN,
         WINDOW_NewMenu,    (ULONG)s_menu,
         WINDOW_Layout, IIntuition->NewObject(NULL, "layout.gadget",
@@ -739,7 +844,6 @@ bool gui_init(TtxApp *app) {
                     TAG_DONE),
 
                 LAYOUT_AddChild, app->gadgets[GID_BTN_RELOAD] = make_btn(GID_BTN_RELOAD, "Neu laden"),
-                LAYOUT_AddChild, app->gadgets[GID_BTN_ZOOM]   = make_btn(GID_BTN_ZOOM, "Zoom"),
 
                 LAYOUT_AddChild, app->gadgets[GID_CHOOSER_CHAN] = IIntuition->NewObject(NULL, "chooser.gadget",
                     GA_ID,            GID_CHOOSER_CHAN,
@@ -853,6 +957,18 @@ static void handle_menu(TtxApp *app, ULONG mid) {
             ttx_render_page(&app->renderer, &app->cur_page);
             gui_redraw_canvas(app);
             break;
+        case MID_FUNC_FIT_WIDTH:
+            app->prefs.fit_width = !app->prefs.fit_width;
+            prefs_save(&app->prefs);
+            gui_redraw_canvas(app);
+            break;
+        case MID_FUNC_ZOOM_RESET:
+            app->zoom_pct = 100;
+            app->view_x = 0;
+            app->view_y = 0;
+            gui_redraw_canvas(app);
+            gui_update_status(app);
+            break;
     }
 }
 
@@ -935,37 +1051,30 @@ void gui_run_loop(TtxApp *app) {
                         case GID_BTN_RELOAD:
                             handle_menu(app, MID_PROJ_RELOAD);
                             break;
-                        case GID_BTN_ZOOM:
-                            gui_toggle_zoom(app);
-                            break;
                     }
                     break;
                 }
 
                 case WMHI_MOUSEBUTTONS: {
-                    if (code == SELECTDOWN && app->win) {
-                        int off_x, off_y, draw_w, draw_h;
-                        get_canvas_draw_rect(app, &off_x, &off_y, &draw_w, &draw_h, NULL);
+                    if (app->win && code == SELECTDOWN) {
                         int row = 0, col = 0;
-                        if (ttx_render_hit_test(app->win->MouseX - off_x, app->win->MouseY - off_y,
-                                                draw_w, draw_h, &row, &col)) {
+                        if (canvas_hit_test(app, app->win->MouseX, app->win->MouseY, &row, &col)) {
                             uint16_t lp = app->cur_page.cells[row][col].link_page;
                             if (lp >= 100 && lp <= 899) {
                                 gui_load_page(app, app->cur_page.channel_idx, lp, 1, true, false);
                             }
                         }
+                    } else if (app->win && code == MIDDLEDOWN) {
+                        handle_menu(app, MID_FUNC_ZOOM_RESET);
                     }
                     break;
                 }
 
                 case WMHI_MOUSEMOVE: {
                     if (app->win) {
-                        int off_x, off_y, draw_w, draw_h;
-                        get_canvas_draw_rect(app, &off_x, &off_y, &draw_w, &draw_h, NULL);
                         int row = 0, col = 0;
                         uint16_t new_hl = 0;
-                        if (ttx_render_hit_test(app->win->MouseX - off_x, app->win->MouseY - off_y,
-                                                draw_w, draw_h, &row, &col)) {
+                        if (canvas_hit_test(app, app->win->MouseX, app->win->MouseY, &row, &col)) {
                             new_hl = app->cur_page.cells[row][col].link_page;
                         }
                         if (new_hl != app->renderer.hover_link) {
@@ -1038,6 +1147,16 @@ void gui_run_loop(TtxApp *app) {
                         case 0x54: /* F5 = Reload */
                             handle_menu(app, MID_PROJ_RELOAD);
                             break;
+                        case 0x7A: /* RAWKEY_NM_WHEEL_UP fallback */
+                            if (app->win) {
+                                apply_mouse_wheel_zoom(app, 1, app->win->MouseX, app->win->MouseY);
+                            }
+                            break;
+                        case 0x7B: /* RAWKEY_NM_WHEEL_DOWN fallback */
+                            if (app->win) {
+                                apply_mouse_wheel_zoom(app, -1, app->win->MouseX, app->win->MouseY);
+                            }
+                            break;
                     }
                     break;
                 }
@@ -1055,6 +1174,13 @@ void gui_run_loop(TtxApp *app) {
                     break;
                 }
             }
+        }
+        if (app->wheel_delta != 0) {
+            int steps = app->wheel_delta;
+            int mx = app->wheel_mx;
+            int my = app->wheel_my;
+            app->wheel_delta = 0;
+            apply_mouse_wheel_zoom(app, steps, mx, my);
         }
     }
 }

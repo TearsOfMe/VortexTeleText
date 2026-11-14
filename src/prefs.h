@@ -9,6 +9,7 @@ typedef struct {
     int  default_page;
     bool reveal_mode;
     bool flash_enabled;
+    bool fit_width;
     char export_dir[256];
 } TtxPrefs;
 
