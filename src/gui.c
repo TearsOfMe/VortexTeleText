@@ -10,15 +10,12 @@
 #include <proto/dos.h>
 #include <proto/intuition.h>
 #include <proto/graphics.h>
-#include <proto/layers.h>
 #include <proto/utility.h>
 #include <proto/chooser.h>
 #include <proto/listbrowser.h>
 #include <proto/requester.h>
 
 #include <graphics/gfx.h>
-#include <graphics/layers.h>
-#include <graphics/composite.h>
 
 #include <classes/window.h>
 #include <classes/requester.h>
@@ -84,9 +81,12 @@ static void get_canvas_draw_rect(TtxApp *app, Object *space_obj,
     memset(&box, 0, sizeof(box));
     Object *obj = space_obj ? space_obj : app->gadgets[GID_CANVAS];
     if (obj) {
-        struct IBox *ib = NULL;
-        IIntuition->GetAttr(SPACE_AreaBox, obj, (ULONG *)&ib);
-        if (ib) box = *ib;
+        IIntuition->GetAttr(SPACE_RenderBox, obj, (ULONG *)&box);
+        if (box.Width <= 0 || box.Height <= 0) {
+            struct IBox *ib = NULL;
+            IIntuition->GetAttr(SPACE_AreaBox, obj, (ULONG *)&ib);
+            if (ib) box = *ib;
+        }
     }
     if (out_box) *out_box = box;
 
@@ -208,44 +208,6 @@ static void scale_framebuffer_rows(const uint32_t *src, int src_stride,
     }
 }
 
-typedef struct {
-    struct BitMap *srcBitMap;
-    uint32         srcWidth;
-    uint32         srcHeight;
-    int32          offsetX;
-    int32          offsetY;
-    int32          scaleX;
-    int32          scaleY;
-    uint32         flags;
-    uint32         retCode;
-} TtxCompositeHookData;
-
-static ULONG composite_hook_func(struct Hook *hook, struct RastPort *rastPort, struct BackFillMessage *msg) {
-    TtxCompositeHookData *hd = (TtxCompositeHookData *)hook->h_Data;
-    if (!hd || !rastPort || !rastPort->BitMap || !msg) {
-        return 0;
-    }
-
-    hd->retCode = IGraphics->CompositeTags(
-        COMPOSITE_Src_Over_Dest,
-        hd->srcBitMap,
-        rastPort->BitMap,
-        COMPTAG_SrcWidth,   hd->srcWidth,
-        COMPTAG_SrcHeight,  hd->srcHeight,
-        COMPTAG_ScaleX,     hd->scaleX,
-        COMPTAG_ScaleY,     hd->scaleY,
-        COMPTAG_OffsetX,    msg->Bounds.MinX - (msg->OffsetX - hd->offsetX),
-        COMPTAG_OffsetY,    msg->Bounds.MinY - (msg->OffsetY - hd->offsetY),
-        COMPTAG_DestX,      msg->Bounds.MinX,
-        COMPTAG_DestY,      msg->Bounds.MinY,
-        COMPTAG_DestWidth,  msg->Bounds.MaxX - msg->Bounds.MinX + 1,
-        COMPTAG_DestHeight, msg->Bounds.MaxY - msg->Bounds.MinY + 1,
-        COMPTAG_Flags,      hd->flags,
-        TAG_DONE);
-
-    return 0;
-}
-
 static void sync_canvas_bitmap(TtxApp *app) {
     if (!app || !app->src_bm) return;
     struct RastPort srp;
@@ -261,6 +223,37 @@ static void sync_canvas_bitmap(TtxApp *app) {
         TTX_FB_W, TTX_FB_H
     );
     app->comp_dirty = true;
+}
+
+static struct BitMap *alloc_screen_bitmap(struct Window *win, uint32 w, uint32 h) {
+    struct BitMap *friend_bm = (win && win->RPort) ? win->RPort->BitMap : NULL;
+    uint32 depth = friend_bm ? IGraphics->GetBitMapAttr(friend_bm, BMA_DEPTH) : 32;
+    if (depth < 16) depth = 16;
+
+    struct BitMap *bm = NULL;
+    if (friend_bm) {
+        bm = IGraphics->AllocBitMapTags(
+            w, h, depth,
+            BMATags_Displayable, TRUE,
+            BMATags_Friend,      friend_bm,
+            TAG_DONE);
+    }
+    if (!bm) {
+        uint32 pix_fmt = (depth <= 16) ? PIXF_R5G6B5 : PIXF_A8R8G8B8;
+        bm = IGraphics->AllocBitMapTags(
+            w, h, depth,
+            BMATags_PixelFormat, pix_fmt,
+            BMATags_Displayable, TRUE,
+            TAG_DONE);
+    }
+    if (!bm) {
+        bm = IGraphics->AllocBitMapTags(
+            w, h, 32,
+            BMATags_PixelFormat, PIXF_A8R8G8B8,
+            BMATags_Displayable, TRUE,
+            TAG_DONE);
+    }
+    return bm;
 }
 
 static void gui_redraw_canvas_rp(TtxApp *app, Object *space_obj, struct RastPort *rp, bool allow_alloc) {
@@ -301,56 +294,14 @@ static void gui_redraw_canvas_rp(TtxApp *app, Object *space_obj, struct RastPort
         return;
     }
 
-    /* Primary Hardware/OS-Composited scaling directly into window layer via DoHookClipRects:
-     * Zero heap allocations, zero mutexes, layer-clipped and safe inside SPACE_RenderHook */
-    if (rp->Layer && rp->BitMap) {
-        struct Rectangle rect;
-        rect.MinX = off_x;
-        rect.MinY = off_y;
-        rect.MaxX = off_x + draw_w - 1;
-        rect.MaxY = off_y + draw_h - 1;
-
-        int32 scale_x = COMP_FLOAT_TO_FIX((float)draw_w / (float)sw);
-        int32 scale_y = COMP_FLOAT_TO_FIX((float)draw_h / (float)sh);
-        int32 origin_x = off_x - (int32)(((float)sx * (float)draw_w) / (float)sw + 0.5f);
-        int32 origin_y = off_y - (int32)(((float)sy * (float)draw_h) / (float)sh + 0.5f);
-
-        TtxCompositeHookData hookData;
-        hookData.srcBitMap = app->src_bm;
-        hookData.srcWidth  = TTX_FB_W;
-        hookData.srcHeight = TTX_FB_H;
-        hookData.offsetX   = origin_x;
-        hookData.offsetY   = origin_y;
-        hookData.scaleX    = scale_x;
-        hookData.scaleY    = scale_y;
-        hookData.flags     = COMPFLAG_IgnoreDestAlpha | COMPFLAG_SrcFilter;
-        hookData.retCode   = COMPERR_Success;
-
-        struct Hook hook;
-        memset(&hook, 0, sizeof(hook));
-        hook.h_Entry = (HOOKFUNC)composite_hook_func;
-        hook.h_Data  = &hookData;
-
-        ILayers->DoHookClipRects(&hook, rp, &rect);
-        if (hookData.retCode == COMPERR_Success) {
-            return;
-        }
-    }
-
-    /* Fallback for drivers without CompositeTags: maintain offscreen scaled BitMap only in main task */
+    /* Scaled/zoomed BitMap is prepared strictly on the main application task */
     if (allow_alloc) {
         if (!app->comp_bm || app->comp_w != draw_w || app->comp_h != draw_h) {
             if (app->comp_bm) {
                 IGraphics->FreeBitMap(app->comp_bm);
                 app->comp_bm = NULL;
             }
-            struct BitMap *friend_bm = (app->win && app->win->RPort) ? app->win->RPort->BitMap : NULL;
-            app->comp_bm = IGraphics->AllocBitMapTags(
-                (uint32)draw_w, (uint32)draw_h, 32,
-                BMATags_PixelFormat, PIXF_A8R8G8B8,
-                BMATags_Displayable, TRUE,
-                BMATags_Friend,      friend_bm,
-                TAG_DONE);
+            app->comp_bm = alloc_screen_bitmap(app->win, (uint32)draw_w, (uint32)draw_h);
             app->comp_w = app->comp_bm ? draw_w : 0;
             app->comp_h = app->comp_bm ? draw_h : 0;
             app->comp_dirty = true;
@@ -390,12 +341,21 @@ static void gui_redraw_canvas_rp(TtxApp *app, Object *space_obj, struct RastPort
             rp, off_x, off_y,
             draw_w, draw_h, 0xC0);
     } else {
+        /* Safe, instant fallback during active resize before WMHI_NEWSIZE finishes */
         int cw = (sw < draw_w) ? sw : draw_w;
         int ch = (sh < draw_h) ? sh : draw_h;
         IGraphics->BltBitMapRastPort(
             app->src_bm, sx, sy,
             rp, off_x, off_y,
             cw, ch, 0xC0);
+        if (draw_w > cw) {
+            IGraphics->SetAPen(rp, 0);
+            IGraphics->RectFill(rp, off_x + cw, off_y, off_x + draw_w - 1, off_y + draw_h - 1);
+        }
+        if (draw_h > ch) {
+            IGraphics->SetAPen(rp, 0);
+            IGraphics->RectFill(rp, off_x, off_y + ch, off_x + cw - 1, off_y + draw_h - 1);
+        }
     }
 }
 
@@ -941,10 +901,11 @@ bool gui_init(TtxApp *app) {
         WA_Activate,       TRUE,
         WA_NewLookMenus,   TRUE,
         WA_ReportMouse,    TRUE,
+        WA_MouseQueue,     1,
         WA_IDCMP,          IDCMP_CLOSEWINDOW | IDCMP_MENUPICK | IDCMP_GADGETUP |
                            IDCMP_RAWKEY | IDCMP_VANILLAKEY | IDCMP_MOUSEBUTTONS |
                            IDCMP_MOUSEMOVE | IDCMP_EXTENDEDMOUSE | IDCMP_INTUITICKS |
-                           IDCMP_NEWSIZE,
+                           IDCMP_NEWSIZE | IDCMP_IDCMPUPDATE,
         WINDOW_IDCMPHook,     (ULONG)&s_idcmp_hook,
         WINDOW_IDCMPHookBits, IDCMP_EXTENDEDMOUSE,
         WINDOW_Position,   WPOS_CENTERSCREEN,
@@ -953,6 +914,7 @@ bool gui_init(TtxApp *app) {
             LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
             LAYOUT_SpaceOuter,  TRUE,
             LAYOUT_SpaceInner,  TRUE,
+            LAYOUT_DeferLayout, TRUE,
 
             /* Teletext 40x25 Display */
             LAYOUT_AddChild, app->gadgets[GID_CANVAS] = IIntuition->NewObject(NULL, "space.gadget",
@@ -1062,20 +1024,7 @@ bool gui_init(TtxApp *app) {
     app->win = (struct Window *)IIntuition->IDoMethod(app->win_obj, WM_OPEN, NULL);
     if (!app->win) return false;
 
-    struct BitMap *friend_bm = app->win->RPort ? app->win->RPort->BitMap : NULL;
-    app->src_bm = IGraphics->AllocBitMapTags(
-        TTX_FB_W, TTX_FB_H, 32,
-        BMATags_PixelFormat, PIXF_A8R8G8B8,
-        BMATags_Displayable, TRUE,
-        BMATags_Friend,      friend_bm,
-        TAG_DONE);
-    if (!app->src_bm) {
-        app->src_bm = IGraphics->AllocBitMapTags(
-            TTX_FB_W, TTX_FB_H, 32,
-            BMATags_PixelFormat, PIXF_A8R8G8B8,
-            BMATags_Displayable, TRUE,
-            TAG_DONE);
-    }
+    app->src_bm = alloc_screen_bitmap(app->win, TTX_FB_W, TTX_FB_H);
 
     app->running = true;
     gui_load_page(app, app->prefs.default_channel, app->prefs.default_page, 1, false, false);
