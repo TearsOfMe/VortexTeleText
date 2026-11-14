@@ -7,12 +7,14 @@
 #include <ctype.h>
 
 const TtxChannel g_ttx_channels[TTX_MAX_CHANS] = {
-    { "ard",  "ARD",  "ard",  TTX_SRC_ARD },
-    { "zdf",  "ZDF",  "zdf",  TTX_SRC_ZDF },
-    { "3sat", "3SAT", "3sat", TTX_SRC_ZDF },
-    { "hr",   "HR",   "hr",   TTX_SRC_HR  },
-    { "wdr",  "WDR",  "wdr",  TTX_SRC_WDR },
-    { "swr",  "SWR",  "swr",  TTX_SRC_SWR }
+    { "ard",   "ARD",    "ard",  TTX_SRC_ARD },
+    { "zdf",   "ZDF",    "zdf",  TTX_SRC_ZDF },
+    { "3sat",  "3SAT",   "3sat", TTX_SRC_ZDF },
+    { "hr",    "HR",     "hr",   TTX_SRC_HR  },
+    { "wdr",   "WDR",    "wdr",  TTX_SRC_WDR },
+    { "swrrp", "SWR RP", "rp",   TTX_SRC_SWR },
+    { "swrbw", "SWR BW", "bw",   TTX_SRC_SWR },
+    { "sr",    "SR",     "sr",   TTX_SRC_SR  }
 };
 
 /* ============================================================================
@@ -873,6 +875,122 @@ bool ttx_parse_wdr_html(const char *html, int html_len, int channel_idx, int req
 }
 
 /* ============================================================================
+ * 5. SR Saartext Parser (https://www.saartext.de/<page>/<subpage>)
+ * ========================================================================== */
+
+bool ttx_parse_sr_html(const char *html, int html_len, int channel_idx, int req_page, int req_sub, TtxPage *out) {
+    (void)html_len;
+    ttx_page_init(out, channel_idx, req_page, req_sub);
+
+    const char *pre = strstr(html, "class=\"saartext_page\"");
+    if (!pre) pre = strstr(html, "saartext_page");
+    if (!pre) return false;
+
+    const char *start = strchr(pre, '>');
+    if (!start) return false;
+    start++;
+
+    const char *end = strstr(start, "</pre>");
+    if (!end) return false;
+
+    /* Subpage info: "Unterseite 1/3" */
+    const char *sub_span = strstr(html, "saartext_pagenumber_unterseite");
+    if (sub_span) {
+        const char *gt = strchr(sub_span, '>');
+        if (gt) {
+            int cur_s = 1, tot_s = 1;
+            const char *slash = NULL;
+            for (const char *p = gt + 1; *p && *p != '<'; p++) {
+                if (*p >= '0' && *p <= '9') {
+                    cur_s = atoi(p);
+                    slash = strchr(p, '/');
+                    if (slash && slash[1] >= '0' && slash[1] <= '9') {
+                        tot_s = atoi(slash + 1);
+                    }
+                    break;
+                }
+            }
+            if (cur_s >= 1) out->subpage = cur_s;
+            if (tot_s >= 1) out->total_subpages = tot_s;
+        }
+    }
+
+    int r = 0, col = 0;
+    uint16_t cur_link = 0;
+    const char *q = start;
+
+    while (q < end && r < 24) {
+        if (*q == '\r') {
+            q++;
+            continue;
+        }
+        if (*q == '\n') {
+            r++;
+            col = 0;
+            cur_link = 0;
+            q++;
+            continue;
+        }
+        if (*q == '<') {
+            if (strncmp(q, "<a ", 3) == 0 || strncmp(q, "<a>", 3) == 0) {
+                const char *gt = strchr(q, '>');
+                const char *href = strstr(q, "href=");
+                cur_link = 0;
+                if (href && (!gt || href < gt)) {
+                    const char *val = href + 5;
+                    if (*val == '"' || *val == '\'') val++;
+                    if (*val == '/') val++;
+                    int p = atoi(val);
+                    if (p >= 100 && p <= 899) cur_link = (uint16_t)p;
+                }
+                q = gt ? gt + 1 : q + 1;
+            } else if (strncmp(q, "</a>", 4) == 0) {
+                cur_link = 0;
+                q += 4;
+            } else {
+                const char *gt = strchr(q, '>');
+                q = gt ? gt + 1 : q + 1;
+            }
+            continue;
+        }
+
+        uint8_t ch;
+        if (*q == '&') {
+            int cons = 1;
+            ch = decode_html_entity(q, &cons);
+            q += cons;
+        } else {
+            int cons = 1;
+            ch = utf8_to_latin1_char(q, &cons);
+            q += cons;
+        }
+
+        if (col < TTX_COLS) {
+            out->cells[r][col].ch = ch;
+            if (r == 0) {
+                out->cells[r][col].fg = TTX_YELLOW;
+                out->cells[r][col].bg = TTX_BLACK;
+            } else if (cur_link >= 100) {
+                out->cells[r][col].fg = TTX_CYAN;
+                out->cells[r][col].bg = TTX_BLACK;
+            } else {
+                out->cells[r][col].fg = TTX_WHITE;
+                out->cells[r][col].bg = TTX_BLACK;
+            }
+            out->cells[r][col].attrs = cur_link ? TTX_ATTR_LINK : 0;
+            out->cells[r][col].link_page = cur_link;
+            col++;
+        }
+    }
+
+    if (r == 0 && col == 0) return false;
+    snprintf(out->title, sizeof(out->title), "%s - Seite %d", g_ttx_channels[channel_idx].name, out->page);
+    ttx_page_detect_links(out);
+    out->valid = true;
+    return true;
+}
+
+/* ============================================================================
  * Live Fetch Dispatcher
  * ========================================================================== */
 
@@ -889,9 +1007,11 @@ bool ttx_fetch_live_page(int channel_idx, int page, int subpage, TtxPage *out, c
     } else if (ch->source == TTX_SRC_HR) {
         snprintf(url, sizeof(url), "https://www.hr-text.hr-fernsehen.de/ttxweb/?page=%d&sub=%d", page, subpage);
     } else if (ch->source == TTX_SRC_SWR) {
-        snprintf(url, sizeof(url), "https://wraps.swr.de/videotext/?stream=rp&page=%d&sub=%d", page, subpage);
+        snprintf(url, sizeof(url), "https://wraps.swr.de/videotext/?stream=%s&page=%d&sub=%d", ch->api_channel, page, subpage);
     } else if (ch->source == TTX_SRC_WDR) {
         snprintf(url, sizeof(url), "https://www1.wdr.de/wdrtext/externvtx100~_eap__page__num-%d.html", page);
+    } else if (ch->source == TTX_SRC_SR) {
+        snprintf(url, sizeof(url), "https://www.saartext.de/%d/%02d", page, subpage);
     } else {
         snprintf(url, sizeof(url), "https://teletext.zdf.de/teletext/%s/seiten/%d.html", ch->api_channel, page);
     }
@@ -916,6 +1036,8 @@ bool ttx_fetch_live_page(int channel_idx, int page, int subpage, TtxPage *out, c
         ok = ttx_parse_hr_html(body, body_len, channel_idx, page, subpage, out);
     } else if (ch->source == TTX_SRC_WDR) {
         ok = ttx_parse_wdr_html(body, body_len, channel_idx, page, subpage, out);
+    } else if (ch->source == TTX_SRC_SR) {
+        ok = ttx_parse_sr_html(body, body_len, channel_idx, page, subpage, out);
     }
 
     free(body);

@@ -7,7 +7,7 @@
 #define TTX_COLS        40
 #define TTX_ROWS        25
 #define TTX_MAX_LINKS   64
-#define TTX_MAX_CHANS   6
+#define TTX_MAX_CHANS   8
 #define TTX_CACHE_SIZE  128
 #define TTX_MAX_FAVS    32
 #define TTX_HISTORY_MAX 32
@@ -37,7 +37,8 @@ typedef enum {
     TTX_SRC_ZDF = 1,
     TTX_SRC_HR  = 2,
     TTX_SRC_WDR = 3,
-    TTX_SRC_SWR = 4
+    TTX_SRC_SWR = 4,
+    TTX_SRC_SR  = 5
 } TtxSourceType;
 
 typedef struct {

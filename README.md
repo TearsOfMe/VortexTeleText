@@ -12,10 +12,12 @@ A native, standalone **Live Teletext Client** for **AmigaOS 4.1 PowerPC** (ReAct
 ### Supported Live Channels
 * **ARD** (`ard-text.de` — native 40×25 mosaic block graphics & subpages)
 * **ZDF** (`teletext.zdf.de`)
-* **3SAT** (`teletext.3sat.de`)
-* **HR** (`hr-text.hr-online.de`)
+* **3SAT** (`teletext.zdf.de`)
+* **HR** (`hr-text.hr-fernsehen.de`)
 * **WDR** (`www1.wdr.de/wdrtext`)
-* **SWR** (`wraps.swr.de/videotext`)
+* **SWR RP** (`wraps.swr.de/videotext/?stream=rp`)
+* **SWR BW** (`wraps.swr.de/videotext/?stream=bw`)
+* **SR (Saartext)** (`saartext.de`)
 
 ### Features & Controls
 * **AmigaTText-Style ReAction GUI**:
@@ -29,7 +31,7 @@ A native, standalone **Live Teletext Client** for **AmigaOS 4.1 PowerPC** (ReAct
     * Direct page entry field (press `Enter` to load)
     * `Neu laden`: forces a fresh live download from the internet (bypassing the RAM cache)
     * `Zoom`: toggles between compact (`510 × 600`) and zoomed (`780 × 810`, clamped to screen size)
-    * Channel chooser (`ARD`, `ZDF`, `3SAT`, `HR`, `WDR`, `SWR`)
+    * Channel chooser (`ARD`, `ZDF`, `3SAT`, `HR`, `WDR`, `SWR RP`, `SWR BW`, `SR`)
 * **Mouse & Keyboard Shortcuts**:
   * **Mouse Click**: click any 3-digit page number (`100–899`) directly inside the Teletext page (highlighted on hover)
   * `0–9`: direct 3-digit page entry
@@ -73,10 +75,12 @@ Ein nativer, eigenständiger **Live-Teletext-Client** für **AmigaOS 4.1 PowerPC
 ### Unterstützte Live-Sender
 * **ARD** (`ard-text.de` – inkl. 40×25 Mosaik-Blockgrafik & Unterseiten)
 * **ZDF** (`teletext.zdf.de`)
-* **3SAT** (`teletext.3sat.de`)
-* **HR** (`hr-text.hr-online.de`)
+* **3SAT** (`teletext.zdf.de`)
+* **HR** (`hr-text.hr-fernsehen.de`)
 * **WDR** (`www1.wdr.de/wdrtext`)
-* **SWR** (`wraps.swr.de/videotext`)
+* **SWR RP** (`wraps.swr.de/videotext/?stream=rp`)
+* **SWR BW** (`wraps.swr.de/videotext/?stream=bw`)
+* **SR (Saartext)** (`saartext.de`)
 
 ### Funktionen & Bedienung
 * **ReAction-GUI im AmigaTText-Stil**:
@@ -90,7 +94,7 @@ Ein nativer, eigenständiger **Live-Teletext-Client** für **AmigaOS 4.1 PowerPC
     * Direkteingabefeld für Seitenzahlen (`Enter` lädt die Seite)
     * `Neu laden`: lädt die aktuelle Seite frisch aus dem Internet (umgeht den RAM-Cache)
     * `Zoom`: schaltet zwischen normaler Fenstergröße (`510 × 600`) und vergrößerter Ansicht (`780 × 810`, an Bildschirmgröße angepasst) um
-    * Sender-Auswahl (`ARD`, `ZDF`, `3SAT`, `HR`, `WDR`, `SWR`)
+    * Sender-Auswahl (`ARD`, `ZDF`, `3SAT`, `HR`, `WDR`, `SWR RP`, `SWR BW`, `SR`)
 * **Maus- & Tastatursteuerung**:
   * **Mausklick**: jede 3-stellige Seitenzahl (`100–899`) im Teletext-Bild ist direkt anklickbar (mit Hover-Hervorhebung)
   * `0–9`: direkte 3-stellige Seiteneingabe
