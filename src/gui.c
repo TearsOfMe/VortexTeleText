@@ -26,6 +26,7 @@
 #include <images/bevel.h>
 #include <libraries/gadtools.h>
 #include <intuition/icclass.h>
+#include <intuition/gadgetclass.h>
 #include <utility/hooks.h>
 
 static struct NewMenu s_menu[] = {
@@ -195,8 +196,8 @@ static void scale_framebuffer_region(const uint32_t *src, int src_stride,
     }
 }
 
-static void gui_redraw_canvas(TtxApp *app) {
-    if (!app->win || !app->gadgets[GID_CANVAS]) return;
+static void gui_redraw_canvas_rp(TtxApp *app, struct RastPort *rp) {
+    if (!app || !rp || !app->gadgets[GID_CANVAS]) return;
     struct IBox box;
     int off_x, off_y, draw_w, draw_h;
     get_canvas_draw_rect(app, &off_x, &off_y, &draw_w, &draw_h, &box);
@@ -204,15 +205,15 @@ static void gui_redraw_canvas(TtxApp *app) {
 
     /* Clear border around centered teletext screen if larger */
     if (box.Width > draw_w || box.Height > draw_h) {
-        IGraphics->SetAPen(app->win->RPort, 0);
+        IGraphics->SetAPen(rp, 0);
         if (off_y > box.Top)
-            IGraphics->RectFill(app->win->RPort, box.Left, box.Top, box.Left + box.Width - 1, off_y - 1);
+            IGraphics->RectFill(rp, box.Left, box.Top, box.Left + box.Width - 1, off_y - 1);
         if (off_y + draw_h < box.Top + box.Height)
-            IGraphics->RectFill(app->win->RPort, box.Left, off_y + draw_h, box.Left + box.Width - 1, box.Top + box.Height - 1);
+            IGraphics->RectFill(rp, box.Left, off_y + draw_h, box.Left + box.Width - 1, box.Top + box.Height - 1);
         if (off_x > box.Left)
-            IGraphics->RectFill(app->win->RPort, box.Left, off_y, off_x - 1, off_y + draw_h - 1);
+            IGraphics->RectFill(rp, box.Left, off_y, off_x - 1, off_y + draw_h - 1);
         if (off_x + draw_w < box.Left + box.Width)
-            IGraphics->RectFill(app->win->RPort, off_x + draw_w, off_y, box.Left + box.Width - 1, off_y + draw_h - 1);
+            IGraphics->RectFill(rp, off_x + draw_w, off_y, box.Left + box.Width - 1, off_y + draw_h - 1);
     }
 
     int sx, sy, sw, sh;
@@ -225,7 +226,7 @@ static void gui_redraw_canvas(TtxApp *app) {
             0, 0,
             TTX_FB_W * 4,
             PIXF_A8R8G8B8,
-            app->win->RPort,
+            rp,
             off_x, off_y,
             draw_w, draw_h
         );
@@ -245,11 +246,16 @@ static void gui_redraw_canvas(TtxApp *app) {
             0, 0,
             draw_w * 4,
             PIXF_A8R8G8B8,
-            app->win->RPort,
+            rp,
             off_x, off_y,
             draw_w, draw_h
         );
     }
+}
+
+static void gui_redraw_canvas(TtxApp *app) {
+    if (!app->win) return;
+    gui_redraw_canvas_rp(app, app->win->RPort);
 }
 
 static bool canvas_hit_test(TtxApp *app, int mx, int my, int *out_row, int *out_col) {
@@ -694,6 +700,15 @@ static Object *make_btn(ULONG gid, const char *label) {
 }
 
 static struct Hook s_idcmp_hook;
+static struct Hook s_space_render_hook;
+
+static uint32 space_render_func(struct Hook *hook, Object *space_obj, struct gpRender *gpr) {
+    (void)space_obj;
+    TtxApp *app = (TtxApp *)hook->h_Data;
+    if (!app || !gpr || !gpr->gpr_RPort) return 0;
+    gui_redraw_canvas_rp(app, gpr->gpr_RPort);
+    return 0;
+}
 
 static uint32 idcmp_hook_func(struct Hook *hook, Object *win_obj, struct IntuiMessage *imsg) {
     (void)win_obj;
@@ -752,6 +767,9 @@ bool gui_init(TtxApp *app) {
     s_idcmp_hook.h_Entry = (HOOKFUNC)idcmp_hook_func;
     s_idcmp_hook.h_Data  = (APTR)app;
 
+    s_space_render_hook.h_Entry = (HOOKFUNC)space_render_func;
+    s_space_render_hook.h_Data  = (APTR)app;
+
     IExec->NewList(&app->chan_list);
     for (int i = 0; i < TTX_MAX_CHANS; i++) {
         struct Node *n = IChooser->AllocChooserNode(CNA_Text, (ULONG)g_ttx_channels[i].name, TAG_DONE);
@@ -786,9 +804,13 @@ bool gui_init(TtxApp *app) {
 
             /* Teletext 40x25 Display */
             LAYOUT_AddChild, app->gadgets[GID_CANVAS] = IIntuition->NewObject(NULL, "space.gadget",
-                GA_ID,           GID_CANVAS,
-                SPACE_MinWidth,  400,
-                SPACE_MinHeight, 312,
+                GA_ID,             GID_CANVAS,
+                GA_ReadOnly,       TRUE,
+                SPACE_MinWidth,    400,
+                SPACE_MinHeight,   312,
+                SPACE_Transparent, TRUE,
+                SPACE_BevelStyle,  BVS_NONE,
+                SPACE_RenderHook,  (ULONG)&s_space_render_hook,
                 TAG_DONE),
             CHILD_WeightedHeight, 100,
 
