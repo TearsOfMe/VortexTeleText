@@ -139,16 +139,18 @@ static void get_zoom_src_rect(TtxApp *app, int *out_sx, int *out_sy, int *out_sw
     *out_sh = sh;
 }
 
-static void scale_framebuffer_region(const uint32_t *src, int src_stride,
-                                     int sx, int sy, int sw, int sh,
-                                     uint32_t *dst, int dw, int dh) {
+static void scale_framebuffer_rows(const uint32_t *src, int src_stride,
+                                   int sx, int sy, int sw, int sh,
+                                   uint32_t *dst, int dw, int dh,
+                                   int dy_start, int rows) {
     if (dw < sw) {
         /* 4-tap bilinear downscale for crisp thin strokes */
         uint32_t x_step = ((uint32_t)(sw - 1) << 16) / (uint32_t)(dw > 1 ? dw - 1 : 1);
         uint32_t y_step = ((uint32_t)(sh - 1) << 16) / (uint32_t)(dh > 1 ? dh - 1 : 1);
-        uint32_t sy_fp = 0;
-        for (int y = 0; y < dh; y++) {
+        uint32_t sy_fp = (uint32_t)dy_start * y_step;
+        for (int y = 0; y < rows; y++) {
             int y0 = sy + (int)(sy_fp >> 16);
+            if (y0 >= sy + sh) y0 = sy + sh - 1;
             int y1 = (y0 + 1 < sy + sh) ? y0 + 1 : y0;
             uint32_t fy = (sy_fp & 0xFFFF) >> 8;
             uint32_t iy = 256 - fy;
@@ -158,6 +160,7 @@ static void scale_framebuffer_region(const uint32_t *src, int src_stride,
             uint32_t sx_fp = 0;
             for (int x = 0; x < dw; x++) {
                 int x0 = sx + (int)(sx_fp >> 16);
+                if (x0 >= sx + sw) x0 = sx + sw - 1;
                 int x1 = (x0 + 1 < sx + sw) ? x0 + 1 : x0;
                 uint32_t fx = (sx_fp & 0xFFFF) >> 8;
                 uint32_t ix = 256 - fx;
@@ -184,12 +187,14 @@ static void scale_framebuffer_region(const uint32_t *src, int src_stride,
         }
     } else {
         /* Crisp nearest-neighbor scale */
-        for (int y = 0; y < dh; y++) {
-            int ry = sy + (y * sh) / dh;
+        for (int y = 0; y < rows; y++) {
+            int ry = sy + ((dy_start + y) * sh) / dh;
+            if (ry >= sy + sh) ry = sy + sh - 1;
             const uint32_t *srow = src + ry * src_stride;
             uint32_t *drow = dst + y * dw;
             for (int x = 0; x < dw; x++) {
                 int rx = sx + (x * sw) / dw;
+                if (rx >= sx + sw) rx = sx + sw - 1;
                 drow[x] = srow[rx];
             }
         }
@@ -231,25 +236,29 @@ static void gui_redraw_canvas_rp(TtxApp *app, struct RastPort *rp) {
             draw_w, draw_h
         );
     } else {
-        int needed = draw_w * draw_h;
-        if (needed > app->scaled_cap) {
-            uint32_t *nb = (uint32_t *)realloc(app->scaled_pixels, (size_t)needed * sizeof(uint32_t));
-            if (!nb) return;
-            app->scaled_pixels = nb;
-            app->scaled_cap = needed;
+        if (!app->scaled_pixels || app->scaled_cap < draw_w) return;
+        int strip_h = app->scaled_cap / draw_w;
+        if (strip_h < 1) strip_h = 1;
+
+        if (app->render_mutex) IExec->MutexObtain(app->render_mutex);
+        for (int dy = 0; dy < draw_h; dy += strip_h) {
+            int ch = draw_h - dy;
+            if (ch > strip_h) ch = strip_h;
+            scale_framebuffer_rows(app->renderer.pixels, TTX_FB_W,
+                                   sx, sy, sw, sh,
+                                   app->scaled_pixels, draw_w, draw_h,
+                                   dy, ch);
+            IGraphics->WritePixelArray(
+                (APTR)app->scaled_pixels,
+                0, 0,
+                draw_w * 4,
+                PIXF_A8R8G8B8,
+                rp,
+                off_x, off_y + dy,
+                draw_w, ch
+            );
         }
-        scale_framebuffer_region(app->renderer.pixels, TTX_FB_W,
-                                 sx, sy, sw, sh,
-                                 app->scaled_pixels, draw_w, draw_h);
-        IGraphics->WritePixelArray(
-            (APTR)app->scaled_pixels,
-            0, 0,
-            draw_w * 4,
-            PIXF_A8R8G8B8,
-            rp,
-            off_x, off_y,
-            draw_w, draw_h
-        );
+        if (app->render_mutex) IExec->MutexRelease(app->render_mutex);
     }
 }
 
@@ -750,6 +759,12 @@ static void gui_handle_digit(TtxApp *app, int digit) {
 bool gui_init(TtxApp *app) {
     memset(app, 0, sizeof(*app));
     app->zoom_pct = 100;
+    app->render_mutex = IExec->AllocSysObjectTags(ASOT_MUTEX, TAG_DONE);
+    app->scaled_cap = 262144; /* 1 MB fixed strip buffer: safe inside SPACE_RenderHook */
+    app->scaled_pixels = (uint32_t *)malloc((size_t)app->scaled_cap * sizeof(uint32_t));
+    if (!app->scaled_pixels) {
+        app->scaled_cap = 0;
+    }
     ttx_cache_init();
     ttx_render_init(&app->renderer);
     prefs_load(&app->prefs);
@@ -932,6 +947,10 @@ void gui_cleanup(TtxApp *app) {
         free(app->scaled_pixels);
         app->scaled_pixels = NULL;
         app->scaled_cap = 0;
+    }
+    if (app->render_mutex) {
+        IExec->FreeSysObject(ASOT_MUTEX, app->render_mutex);
+        app->render_mutex = NULL;
     }
 
     struct Node *n;
