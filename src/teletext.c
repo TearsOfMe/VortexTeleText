@@ -7,14 +7,28 @@
 #include <ctype.h>
 
 const TtxChannel g_ttx_channels[TTX_MAX_CHANS] = {
-    { "ard",   "ARD",    "ard",  TTX_SRC_ARD },
-    { "zdf",   "ZDF",    "zdf",  TTX_SRC_ZDF },
-    { "3sat",  "3SAT",   "3sat", TTX_SRC_ZDF },
-    { "hr",    "HR",     "hr",   TTX_SRC_HR  },
-    { "wdr",   "WDR",    "wdr",  TTX_SRC_WDR },
-    { "swrrp", "SWR RP", "rp",   TTX_SRC_SWR },
-    { "swrbw", "SWR BW", "bw",   TTX_SRC_SWR },
-    { "sr",    "SR",     "sr",   TTX_SRC_SR  }
+    /* Deutsche Teletext-Sender (Index 0..7) */
+    { "ard",      "ARD",         "ard",       TTX_SRC_ARD },
+    { "zdf",      "ZDF",         "zdf",       TTX_SRC_ZDF },
+    { "3sat",     "3SAT",        "3sat",      TTX_SRC_ZDF },
+    { "hr",       "HR",          "hr",        TTX_SRC_HR  },
+    { "wdr",      "WDR",         "wdr",       TTX_SRC_WDR },
+    { "swrrp",    "SWR RP",      "rp",        TTX_SRC_SWR },
+    { "swrbw",    "SWR BW",      "bw",        TTX_SRC_SWR },
+    { "sr",       "SR",          "sr",        TTX_SRC_SR  },
+
+    /* Auslaendische Teletext-Sender (Schweiz & Oesterreich, Index 8..18) */
+    { "srf1",     "SRF 1 (CH)",  "SRF1",      TTX_SRC_SRF },
+    { "srf2",     "SRF zwei",    "SRFzwei",   TTX_SRC_SRF },
+    { "srfinfo",  "SRF info",    "SRFInfo",   TTX_SRC_SRF },
+    { "rts1",     "RTS 1 (CH)",  "RTSUn",     TTX_SRC_SRF },
+    { "rts2",     "RTS 2 (CH)",  "RTSDeux",   TTX_SRC_SRF },
+    { "rsila1",   "RSI LA 1",    "RSILA1",    TTX_SRC_SRF },
+    { "rsila2",   "RSI LA 2",    "RSILA2",    TTX_SRC_SRF },
+    { "orf1",     "ORF 1 (AT)",  "orf1",      TTX_SRC_ORF },
+    { "orf2",     "ORF 2 (AT)",  "orf2",      TTX_SRC_ORF },
+    { "orf3",     "ORF III",     "orfiii",    TTX_SRC_ORF },
+    { "orfsport", "ORF Sport+",  "sportplus", TTX_SRC_ORF }
 };
 
 /* ============================================================================
@@ -251,11 +265,13 @@ static uint8_t ttx_map_national_char(uint8_t b, int lang_code) {
 
 static void ttx_decode_ep1_bytes(const uint8_t *raw, int raw_len, int lang_code, TtxPage *pg) {
     int rows = raw_len / TTX_COLS;
-    if (rows > TTX_ROWS) rows = TTX_ROWS;
+    int start_r = (rows == 23) ? 1 : 0;
+    if (rows + start_r > TTX_ROWS) rows = TTX_ROWS - start_r;
 
     bool prev_row_double = false;
 
     for (int r = 0; r < rows; r++) {
+        int tr = r + start_r;
         uint8_t fg = TTX_WHITE;
         uint8_t bg = TTX_BLACK;
         bool mosaic = false;
@@ -270,10 +286,10 @@ static void ttx_decode_ep1_bytes(const uint8_t *raw, int raw_len, int lang_code,
         if (prev_row_double) {
             prev_row_double = false;
             for (int c = 0; c < TTX_COLS; c++) {
-                pg->cells[r][c].ch = ' ';
-                pg->cells[r][c].fg = fg;
-                pg->cells[r][c].bg = pg->cells[r - 1][c].bg;
-                pg->cells[r][c].attrs = 0;
+                pg->cells[tr][c].ch = ' ';
+                pg->cells[tr][c].fg = fg;
+                pg->cells[tr][c].bg = pg->cells[tr - 1][c].bg;
+                pg->cells[tr][c].attrs = 0;
             }
             continue;
         }
@@ -312,31 +328,31 @@ static void ttx_decode_ep1_bytes(const uint8_t *raw, int raw_len, int lang_code,
                     default: break;
                 }
 
-                pg->cells[r][c].fg = fg;
-                pg->cells[r][c].bg = bg;
+                pg->cells[tr][c].fg = fg;
+                pg->cells[tr][c].bg = bg;
                 if (hold_mosaic && mosaic && held_mosaic_ch != 0) {
-                    pg->cells[r][c].ch = held_mosaic_ch;
-                    pg->cells[r][c].attrs = TTX_ATTR_MOSAIC | (separated ? TTX_ATTR_SEPARATED : 0);
+                    pg->cells[tr][c].ch = held_mosaic_ch;
+                    pg->cells[tr][c].attrs = TTX_ATTR_MOSAIC | (separated ? TTX_ATTR_SEPARATED : 0);
                 } else {
-                    pg->cells[r][c].ch = ' ';
-                    pg->cells[r][c].attrs = 0;
+                    pg->cells[tr][c].ch = ' ';
+                    pg->cells[tr][c].attrs = 0;
                 }
                 (void)set_at;
             } else {
-                pg->cells[r][c].fg = fg;
-                pg->cells[r][c].bg = bg;
-                pg->cells[r][c].attrs = (flash ? TTX_ATTR_FLASH : 0) |
+                pg->cells[tr][c].fg = fg;
+                pg->cells[tr][c].bg = bg;
+                pg->cells[tr][c].attrs = (flash ? TTX_ATTR_FLASH : 0) |
                                         (double_h ? TTX_ATTR_DOUBLE_H : 0) |
                                         (conceal ? TTX_ATTR_CONCEAL : 0);
 
                 if (mosaic && ((b >= 0x20 && b <= 0x3F) || (b >= 0x60 && b <= 0x7F))) {
                     /* Map ETS 300 706 mosaic byte to 6-bit pattern (bit0..bit5) */
                     uint8_t m = (uint8_t)((b & 0x1F) | ((b & 0x40) ? 0x20 : 0x00));
-                    pg->cells[r][c].ch = m;
-                    pg->cells[r][c].attrs |= TTX_ATTR_MOSAIC | (separated ? TTX_ATTR_SEPARATED : 0);
+                    pg->cells[tr][c].ch = m;
+                    pg->cells[tr][c].attrs |= TTX_ATTR_MOSAIC | (separated ? TTX_ATTR_SEPARATED : 0);
                     held_mosaic_ch = m;
                 } else {
-                    pg->cells[r][c].ch = ttx_map_national_char(b, lang_code);
+                    pg->cells[tr][c].ch = ttx_map_national_char(b, lang_code);
                 }
             }
         }
@@ -395,10 +411,144 @@ bool ttx_parse_srf_json(const char *json, int json_len, int channel_idx, int req
     snprintf(hdr, sizeof(hdr), "P%-3d %-16s %03d/%02d",
              out->page, g_ttx_channels[channel_idx].name, out->page, out->subpage);
     for (int c = 0; c < TTX_COLS && hdr[c]; c++) {
-        if (out->cells[0][c].ch == ' ' && c < 12) {
-            out->cells[0][c].ch = (uint8_t)hdr[c];
+        out->cells[0][c].ch = (uint8_t)hdr[c];
+        out->cells[0][c].fg = (c < 4) ? TTX_YELLOW : (c < 20 ? TTX_WHITE : TTX_CYAN);
+    }
+
+    snprintf(out->title, sizeof(out->title), "%s - Seite %d", g_ttx_channels[channel_idx].name, out->page);
+    ttx_page_detect_links(out);
+    out->valid = true;
+    return true;
+}
+
+bool ttx_parse_orf_json(const char *json, int json_len, int channel_idx, int req_page, int req_sub, TtxPage *out) {
+    (void)json_len;
+    ttx_page_init(out, channel_idx, req_page, req_sub);
+
+    int val = 0;
+    if (json_get_int(json, "number", &val) || json_get_int(json, "pageNumber", &val)) out->page = val;
+    if (json_get_int(json, "nextPage", &val) && val >= 100 && val <= 899) out->next_page = val;
+    if (json_get_int(json, "previousPage", &val) && val >= 100 && val <= 899) out->prev_page = val;
+
+    /* Count subpages */
+    const char *sub_arr = strstr(json, "\"subpages\"");
+    if (!sub_arr) return false;
+
+    int count = 0;
+    const char *scan = sub_arr;
+    const char *target_block = NULL;
+    while ((scan = strstr(scan, "\"altText\"")) != NULL) {
+        count++;
+        if (count == req_sub || (req_sub == 1 && count == 1)) {
+            target_block = scan;
+        }
+        scan += 9;
+    }
+    if (count == 0) return false;
+    out->total_subpages = count;
+    out->subpage = (req_sub >= 1 && req_sub <= count) ? req_sub : 1;
+    if (!target_block) target_block = strstr(sub_arr, "\"altText\"");
+
+    /* Extract altText */
+    char *text = (char *)malloc(4096);
+    if (!text) return false;
+    if (!json_get_string(target_block, "altText", text, 4096, NULL)) {
+        free(text);
+        return false;
+    }
+
+    /* Header row 0 */
+    char hdr[41];
+    snprintf(hdr, sizeof(hdr), "P%-3d %-16s %03d/%02d",
+             out->page, g_ttx_channels[channel_idx].name, out->page, out->subpage);
+    for (int c = 0; c < TTX_COLS && hdr[c]; c++) {
+        out->cells[0][c].ch = (uint8_t)hdr[c];
+        out->cells[0][c].fg = (c < 4) ? TTX_YELLOW : (c < 20 ? TTX_WHITE : TTX_CYAN);
+    }
+
+    /* Skip leading page prefix like "100.1. " or "101.1. " */
+    char *p = text;
+    if (isdigit((unsigned char)*p)) {
+        while (*p && *p != ' ' && *p != '.') p++;
+        while (*p == '.' || *p == ' ') p++;
+    }
+
+    int row = 2;
+    while (*p && row < TTX_ROWS - 1) {
+        while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
+        if (!*p) break;
+
+        char *dot = strstr(p, ". ");
+        int part_len = dot ? (int)(dot - p) : (int)strlen(p);
+        char part[256];
+        if (part_len >= (int)sizeof(part)) part_len = (int)sizeof(part) - 1;
+        memcpy(part, p, part_len);
+        part[part_len] = '\0';
+        p += part_len;
+        if (dot) p += 2;
+
+        while (part_len > 0 && (part[part_len - 1] == ' ' || part[part_len - 1] == '.')) {
+            part[--part_len] = '\0';
+        }
+        if (part_len == 0) continue;
+
+        /* Check if next token in text is a 3-digit page number e.g. "101. " */
+        int target_pg = 0;
+        char *peek = p;
+        while (*peek == ' ') peek++;
+        if (isdigit((unsigned char)peek[0]) && isdigit((unsigned char)peek[1]) &&
+            isdigit((unsigned char)peek[2]) && (peek[3] == '.' || peek[3] == ' ' || !peek[3])) {
+            target_pg = (peek[0] - '0') * 100 + (peek[1] - '0') * 10 + (peek[2] - '0');
+            if (target_pg >= 100 && target_pg <= 899) {
+                p = peek + 3;
+                while (*p == '.' || *p == ' ') p++;
+            } else {
+                target_pg = 0;
+            }
+        }
+
+        if (target_pg > 0) {
+            int max_text = 33;
+            if (part_len > max_text) part_len = max_text;
+            for (int c = 0; c < part_len; c++) {
+                out->cells[row][c + 1].ch = (uint8_t)part[c];
+                out->cells[row][c + 1].fg = (row == 2) ? TTX_YELLOW : TTX_WHITE;
+            }
+            char pg_str[4];
+            snprintf(pg_str, sizeof(pg_str), "%03d", target_pg);
+            for (int k = 0; k < 3; k++) {
+                out->cells[row][36 + k].ch = (uint8_t)pg_str[k];
+                out->cells[row][36 + k].fg = TTX_CYAN;
+                out->cells[row][36 + k].link_page = target_pg;
+                out->cells[row][36 + k].attrs |= TTX_ATTR_LINK;
+            }
+            row++;
+        } else {
+            char *w = part;
+            while (*w && row < TTX_ROWS - 1) {
+                while (*w == ' ') w++;
+                if (!*w) break;
+                int rem = (int)strlen(w);
+                int line_len = (rem <= 38) ? rem : 38;
+                if (rem > 38) {
+                    int last_sp = -1;
+                    for (int s = 0; s <= 38; s++) {
+                        if (w[s] == ' ') last_sp = s;
+                    }
+                    if (last_sp > 8) line_len = last_sp;
+                }
+                uint8_t fg = (row == 2) ? TTX_YELLOW : ((row == 3 && out->page > 100) ? TTX_CYAN : TTX_WHITE);
+                for (int c = 0; c < line_len; c++) {
+                    out->cells[row][c + 1].ch = (uint8_t)w[c];
+                    out->cells[row][c + 1].fg = fg;
+                }
+                row++;
+                w += line_len;
+            }
         }
     }
+
+    free(text);
 
     snprintf(out->title, sizeof(out->title), "%s - Seite %d", g_ttx_channels[channel_idx].name, out->page);
     ttx_page_detect_links(out);
@@ -1012,6 +1162,10 @@ bool ttx_fetch_live_page(int channel_idx, int page, int subpage, TtxPage *out, c
         snprintf(url, sizeof(url), "https://www1.wdr.de/wdrtext/externvtx100~_eap__page__num-%d.html", page);
     } else if (ch->source == TTX_SRC_SR) {
         snprintf(url, sizeof(url), "https://www.saartext.de/%d/%02d", page, subpage);
+    } else if (ch->source == TTX_SRC_SRF) {
+        snprintf(url, sizeof(url), "https://api.teletext.ch/channels/%s/pages/%d", ch->api_channel, page);
+    } else if (ch->source == TTX_SRC_ORF) {
+        snprintf(url, sizeof(url), "https://afeeds.orf.at/teletext/api/v2/mobile/channels/%s/pages/%d", ch->api_channel, page);
     } else {
         snprintf(url, sizeof(url), "https://teletext.zdf.de/teletext/%s/seiten/%d.html", ch->api_channel, page);
     }
@@ -1038,6 +1192,10 @@ bool ttx_fetch_live_page(int channel_idx, int page, int subpage, TtxPage *out, c
         ok = ttx_parse_wdr_html(body, body_len, channel_idx, page, subpage, out);
     } else if (ch->source == TTX_SRC_SR) {
         ok = ttx_parse_sr_html(body, body_len, channel_idx, page, subpage, out);
+    } else if (ch->source == TTX_SRC_SRF) {
+        ok = ttx_parse_srf_json(body, body_len, channel_idx, page, subpage, out);
+    } else if (ch->source == TTX_SRC_ORF) {
+        ok = ttx_parse_orf_json(body, body_len, channel_idx, page, subpage, out);
     }
 
     free(body);

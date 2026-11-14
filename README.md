@@ -10,14 +10,20 @@
 A native, standalone **Live Teletext Client** for **AmigaOS 4.1 PowerPC** (ReAction GUI + AmiSSL 4/5 HTTPS), inspired by **AmigaTText** and part of the Vortex suite.
 
 ### Supported Live Channels
-* **ARD** (`ard-text.de` — native 40×25 mosaic block graphics & subpages)
-* **ZDF** (`teletext.zdf.de`)
-* **3SAT** (`teletext.zdf.de`)
-* **HR** (`hr-text.hr-fernsehen.de`)
-* **WDR** (`www1.wdr.de/wdrtext`)
-* **SWR RP** (`wraps.swr.de/videotext/?stream=rp`)
-* **SWR BW** (`wraps.swr.de/videotext/?stream=bw`)
-* **SR (Saartext)** (`saartext.de`)
+* **Germany**:
+  * **ARD** (`ard-text.de` — native 40×25 mosaic block graphics & subpages)
+  * **ZDF** (`teletext.zdf.de`)
+  * **3SAT** (`teletext.zdf.de`)
+  * **HR** (`hr-text.hr-fernsehen.de`)
+  * **WDR** (`www1.wdr.de/wdrtext`)
+  * **SWR RP** (`wraps.swr.de/videotext/?stream=rp`)
+  * **SWR BW** (`wraps.swr.de/videotext/?stream=bw`)
+  * **SR (Saartext)** (`saartext.de`)
+* **Switzerland & Austria (International Chooser)**:
+  * **SRF 1**, **SRF zwei**, **SRF info** (Switzerland - German)
+  * **RTS 1**, **RTS 2** (Switzerland - French)
+  * **RSI LA 1**, **RSI LA 2** (Switzerland - Italian)
+  * **ORF 1**, **ORF 2**, **ORF III**, **ORF Sport+** (Austria)
 
 ### Features & Controls
 * **AmigaTText-Style ReAction GUI**:
@@ -30,7 +36,7 @@ A native, standalone **Live Teletext Client** for **AmigaOS 4.1 PowerPC** (ReAct
   * **"Seiten Nummer Auswahl" Bar**:
     * Direct page entry field (press `Enter` to load)
     * `Neu laden`: forces a fresh live download from the internet (bypassing the RAM cache)
-    * Channel chooser (`ARD`, `ZDF`, `3SAT`, `HR`, `WDR`, `SWR RP`, `SWR BW`, `SR`)
+    * Channel choosers (German channels: `ARD`, `ZDF`, `3SAT`, `HR`, `WDR`, `SWR RP`, `SWR BW`, `SR`; International channels: `SRF 1/2/Info`, `RTS 1/2`, `RSI 1/2`, `ORF 1/2/III/Sport+`)
 * **Mouse & Keyboard Shortcuts**:
   * **Mouse Wheel**: smooth zoom (`100%–300%`) while hovering over the Teletext display (Middle-click or `Amiga+0` resets zoom)
   * **Fit to Window Width** (`Funktionen -> An Fensterbreite anpassen`): scales the Teletext display to the exact window width (enabled by default, saved in prefs)
@@ -74,14 +80,20 @@ This builds `VortexTeletext` and `VortexTeletext.stripped`.
 Ein nativer, eigenständiger **Live-Teletext-Client** für **AmigaOS 4.1 PowerPC** (ReAction GUI + AmiSSL 4/5 HTTPS), inspiriert von **AmigaTText** und passend zur Vortex-Serie.
 
 ### Unterstützte Live-Sender
-* **ARD** (`ard-text.de` – inkl. 40×25 Mosaik-Blockgrafik & Unterseiten)
-* **ZDF** (`teletext.zdf.de`)
-* **3SAT** (`teletext.zdf.de`)
-* **HR** (`hr-text.hr-fernsehen.de`)
-* **WDR** (`www1.wdr.de/wdrtext`)
-* **SWR RP** (`wraps.swr.de/videotext/?stream=rp`)
-* **SWR BW** (`wraps.swr.de/videotext/?stream=bw`)
-* **SR (Saartext)** (`saartext.de`)
+* **Deutschland**:
+  * **ARD** (`ard-text.de` – inkl. 40×25 Mosaik-Blockgrafik & Unterseiten)
+  * **ZDF** (`teletext.zdf.de`)
+  * **3SAT** (`teletext.zdf.de`)
+  * **HR** (`hr-text.hr-fernsehen.de`)
+  * **WDR** (`www1.wdr.de/wdrtext`)
+  * **SWR RP** (`wraps.swr.de/videotext/?stream=rp`)
+  * **SWR BW** (`wraps.swr.de/videotext/?stream=bw`)
+  * **SR (Saartext)** (`saartext.de`)
+* **Schweiz & Österreich (Internationales Auswahlfeld)**:
+  * **SRF 1**, **SRF zwei**, **SRF info** (Schweiz – Deutsch)
+  * **RTS 1**, **RTS 2** (Schweiz – Französisch)
+  * **RSI LA 1**, **RSI LA 2** (Schweiz – Italienisch)
+  * **ORF 1**, **ORF 2**, **ORF III**, **ORF Sport+** (Österreich)
 
 ### Funktionen & Bedienung
 * **ReAction-GUI im AmigaTText-Stil**:
@@ -94,7 +106,7 @@ Ein nativer, eigenständiger **Live-Teletext-Client** für **AmigaOS 4.1 PowerPC
   * **„Seiten Nummer Auswahl“**:
     * Direkteingabefeld für Seitenzahlen (`Enter` lädt die Seite)
     * `Neu laden`: lädt die aktuelle Seite frisch aus dem Internet (umgeht den RAM-Cache)
-    * Sender-Auswahl (`ARD`, `ZDF`, `3SAT`, `HR`, `WDR`, `SWR RP`, `SWR BW`, `SR`)
+    * Sender-Auswahlmenüs (Deutsche Sender: `ARD`, `ZDF`, `3SAT`, `HR`, `WDR`, `SWR RP`, `SWR BW`, `SR`; Ausländische Sender: `SRF 1/2/Info`, `RTS 1/2`, `RSI 1/2`, `ORF 1/2/III/Sport+`)
 * **Maus- & Tastatursteuerung**:
   * **Mausrad**: stufenloser Zoom (`100%–300%`) über der Teletext-Anzeige (Mittelklick oder `Amiga+0` setzt Zoom zurück)
   * **An Fensterbreite anpassen** (`Funktionen -> An Fensterbreite anpassen`): skaliert die Teletext-Anzeige exakt auf die Fensterbreite (Standard aktiv, gespeichert in Prefs)

@@ -30,6 +30,7 @@ enum {
     GID_STR_PAGE,
     GID_BTN_RELOAD,
     GID_CHOOSER_CHAN,
+    GID_CHOOSER_INTL,
     GID_MAX
 };
 
@@ -58,6 +59,7 @@ typedef struct {
     struct Window   *win;
     Object          *gadgets[GID_MAX];
     struct List      chan_list;
+    struct List      intl_chan_list;
 
     Object          *fav_win_obj;
     struct Window   *fav_win;

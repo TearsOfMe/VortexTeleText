@@ -449,8 +449,13 @@ static void gui_sync_controls(TtxApp *app) {
     snprintf(pbuf, sizeof(pbuf), "%03d", app->cur_page.page);
     IIntuition->SetGadgetAttrs((struct Gadget *)app->gadgets[GID_STR_PAGE], app->win, NULL,
                                STRINGA_TextVal, (ULONG)pbuf, TAG_DONE);
-    IIntuition->SetGadgetAttrs((struct Gadget *)app->gadgets[GID_CHOOSER_CHAN], app->win, NULL,
-                               CHOOSER_Selected, (ULONG)app->cur_page.channel_idx, TAG_DONE);
+    if (app->cur_page.channel_idx < TTX_CHANS_DE_COUNT) {
+        IIntuition->SetGadgetAttrs((struct Gadget *)app->gadgets[GID_CHOOSER_CHAN], app->win, NULL,
+                                   CHOOSER_Selected, (ULONG)app->cur_page.channel_idx, TAG_DONE);
+    } else if (app->gadgets[GID_CHOOSER_INTL]) {
+        IIntuition->SetGadgetAttrs((struct Gadget *)app->gadgets[GID_CHOOSER_INTL], app->win, NULL,
+                                   CHOOSER_Selected, (ULONG)(app->cur_page.channel_idx - TTX_CHANS_DE_COUNT), TAG_DONE);
+    }
     gui_update_keypad_display(app, app->num_len > 0 ? app->num_buf : "");
 }
 
@@ -809,7 +814,6 @@ static Object *make_btn(ULONG gid, const char *label) {
 
 static struct Hook s_idcmp_hook;
 
-
 static uint32 idcmp_hook_func(struct Hook *hook, Object *win_obj, struct IntuiMessage *imsg) {
     (void)win_obj;
     TtxApp *app = (TtxApp *)hook->h_Data;
@@ -868,18 +872,23 @@ bool gui_init(TtxApp *app) {
     s_idcmp_hook.h_Entry = (HOOKFUNC)idcmp_hook_func;
     s_idcmp_hook.h_Data  = (APTR)app;
 
-
     IExec->NewList(&app->chan_list);
-    for (int i = 0; i < TTX_MAX_CHANS; i++) {
+    for (int i = 0; i < TTX_CHANS_DE_COUNT; i++) {
         struct Node *n = IChooser->AllocChooserNode(CNA_Text, (ULONG)g_ttx_channels[i].name, TAG_DONE);
         if (n) IExec->AddTail(&app->chan_list, n);
     }
 
+    IExec->NewList(&app->intl_chan_list);
+    for (int i = 0; i < TTX_CHANS_INTL_COUNT; i++) {
+        struct Node *n = IChooser->AllocChooserNode(CNA_Text, (ULONG)g_ttx_channels[TTX_CHANS_DE_COUNT + i].name, TAG_DONE);
+        if (n) IExec->AddTail(&app->intl_chan_list, n);
+    }
+
     app->win_obj = IIntuition->NewObject(NULL, "window.class",
         WA_Title,          (ULONG)"VortexTeletext",
-        WA_Width,          510,
+        WA_Width,          560,
         WA_Height,         600,
-        WA_MinWidth,       420,
+        WA_MinWidth,       460,
         WA_MinHeight,      500,
         WA_MaxWidth,       ~0UL,
         WA_MaxHeight,      ~0UL,
@@ -1001,7 +1010,15 @@ bool gui_init(TtxApp *app) {
                     GA_RelVerify,     TRUE,
                     CHOOSER_PopUp,    TRUE,
                     CHOOSER_Labels,   (ULONG)&app->chan_list,
-                    CHOOSER_Selected, (ULONG)app->prefs.default_channel,
+                    CHOOSER_Selected, (ULONG)(app->prefs.default_channel < TTX_CHANS_DE_COUNT ? app->prefs.default_channel : 0),
+                    TAG_DONE),
+
+                LAYOUT_AddChild, app->gadgets[GID_CHOOSER_INTL] = IIntuition->NewObject(NULL, "chooser.gadget",
+                    GA_ID,            GID_CHOOSER_INTL,
+                    GA_RelVerify,     TRUE,
+                    CHOOSER_PopUp,    TRUE,
+                    CHOOSER_Labels,   (ULONG)&app->intl_chan_list,
+                    CHOOSER_Selected, (ULONG)(app->prefs.default_channel >= TTX_CHANS_DE_COUNT ? (app->prefs.default_channel - TTX_CHANS_DE_COUNT) : 0),
                     TAG_DONE),
 
                 TAG_DONE),
@@ -1052,6 +1069,9 @@ void gui_cleanup(TtxApp *app) {
 
     struct Node *n;
     while ((n = IExec->RemHead(&app->chan_list)) != NULL) {
+        IChooser->FreeChooserNode(n);
+    }
+    while ((n = IExec->RemHead(&app->intl_chan_list)) != NULL) {
         IChooser->FreeChooserNode(n);
     }
 }
@@ -1199,6 +1219,14 @@ void gui_run_loop(TtxApp *app) {
                             app->num_len = 0;
                             app->num_buf[0] = '\0';
                             gui_load_page(app, (int)sel, 100, 1, true, false);
+                            break;
+                        }
+                        case GID_CHOOSER_INTL: {
+                            ULONG sel = 0;
+                            IIntuition->GetAttr(CHOOSER_Selected, app->gadgets[GID_CHOOSER_INTL], &sel);
+                            app->num_len = 0;
+                            app->num_buf[0] = '\0';
+                            gui_load_page(app, TTX_CHANS_DE_COUNT + (int)sel, 100, 1, true, false);
                             break;
                         }
                         case GID_STR_PAGE:
