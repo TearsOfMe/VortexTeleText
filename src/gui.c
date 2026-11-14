@@ -39,15 +39,15 @@ static struct NewMenu s_menu[] = {
     { NM_ITEM,  (STRPTR)"Als Text exportieren", (STRPTR)"T", 0, 0, (APTR)MID_PROJ_EXPORT_TXT },
     { NM_ITEM,  (STRPTR)"Als BMP exportieren",  (STRPTR)"S", 0, 0, (APTR)MID_PROJ_EXPORT_BMP },
     { NM_ITEM,  NM_BARLABEL,                    NULL,        0, 0, NULL },
-    { NM_ITEM,  (STRPTR)"Ueber VortexTeletext", NULL,        0, 0, (APTR)MID_PROJ_ABOUT },
+    { NM_ITEM,  (STRPTR)"Über VortexTeletext",  NULL,        0, 0, (APTR)MID_PROJ_ABOUT },
     { NM_ITEM,  (STRPTR)"Beenden",              (STRPTR)"Q", 0, 0, (APTR)MID_PROJ_QUIT },
 
     { NM_TITLE, (STRPTR)"Navigation",           NULL,        0, 0, NULL },
-    { NM_ITEM,  (STRPTR)"Zurueck (Verlauf)",    NULL,        0, 0, (APTR)MID_NAV_BACK },
+    { NM_ITEM,  (STRPTR)"Zurück (Verlauf)",     NULL,        0, 0, (APTR)MID_NAV_BACK },
     { NM_ITEM,  (STRPTR)"Vorige Seite",         NULL,        0, 0, (APTR)MID_NAV_PREV_PAGE },
-    { NM_ITEM,  (STRPTR)"Naechste Seite",       NULL,        0, 0, (APTR)MID_NAV_NEXT_PAGE },
+    { NM_ITEM,  (STRPTR)"Nächste Seite",        NULL,        0, 0, (APTR)MID_NAV_NEXT_PAGE },
     { NM_ITEM,  (STRPTR)"Vorige Unterseite",    NULL,        0, 0, (APTR)MID_NAV_PREV_SUB },
-    { NM_ITEM,  (STRPTR)"Naechste Unterseite",  NULL,        0, 0, (APTR)MID_NAV_NEXT_SUB },
+    { NM_ITEM,  (STRPTR)"Nächste Unterseite",   NULL,        0, 0, (APTR)MID_NAV_NEXT_SUB },
 
     { NM_TITLE, (STRPTR)"Funktionen",           NULL,        0, 0, NULL },
     { NM_ITEM,  (STRPTR)"Volltextsuche...",     (STRPTR)"F", 0, 0, (APTR)MID_FUNC_SEARCH },
@@ -56,7 +56,7 @@ static struct NewMenu s_menu[] = {
     { NM_ITEM,  (STRPTR)"Blinken umschalten",   NULL,        0, 0, (APTR)MID_FUNC_FLASH },
     { NM_ITEM,  NM_BARLABEL,                    NULL,        0, 0, NULL },
     { NM_ITEM,  (STRPTR)"An Fensterbreite anpassen", NULL, CHECKIT | MENUTOGGLE | CHECKED, 0, (APTR)MID_FUNC_FIT_WIDTH },
-    { NM_ITEM,  (STRPTR)"Zoom zuruecksetzen (100%)", (STRPTR)"0", 0, 0, (APTR)MID_FUNC_ZOOM_RESET },
+    { NM_ITEM,  (STRPTR)"Zoom zurücksetzen (100%)", (STRPTR)"0", 0, 0, (APTR)MID_FUNC_ZOOM_RESET },
 
     { NM_END, NULL, NULL, 0, 0, NULL }
 };
@@ -580,9 +580,9 @@ static void open_search_dialog(TtxApp *app) {
             LAYOUT_AddChild, IIntuition->NewObject(NULL, "layout.gadget",
                 LAYOUT_Orientation, LAYOUT_ORIENT_HORIZ,
                 LAYOUT_AddChild, btn_open = IIntuition->NewObject(NULL, "button.gadget",
-                    GA_ID, 4, GA_RelVerify, TRUE, GA_Text, (ULONG)"Seite oeffnen", TAG_DONE),
+                    GA_ID, 4, GA_RelVerify, TRUE, GA_Text, (ULONG)"Seite öffnen", TAG_DONE),
                 LAYOUT_AddChild, btn_close = IIntuition->NewObject(NULL, "button.gadget",
-                    GA_ID, 5, GA_RelVerify, TRUE, GA_Text, (ULONG)"Schliessen", TAG_DONE),
+                    GA_ID, 5, GA_RelVerify, TRUE, GA_Text, (ULONG)"Schließen", TAG_DONE),
                 TAG_DONE),
             CHILD_WeightedHeight, 0,
             TAG_DONE),
@@ -714,13 +714,13 @@ static void open_favorites_dialog(TtxApp *app) {
             LAYOUT_AddChild, IIntuition->NewObject(NULL, "layout.gadget",
                 LAYOUT_Orientation, LAYOUT_ORIENT_HORIZ,
                 LAYOUT_AddChild, IIntuition->NewObject(NULL, "button.gadget",
-                    GA_ID, 2, GA_RelVerify, TRUE, GA_Text, (ULONG)"Oeffnen", TAG_DONE),
+                    GA_ID, 2, GA_RelVerify, TRUE, GA_Text, (ULONG)"Öffnen", TAG_DONE),
                 LAYOUT_AddChild, IIntuition->NewObject(NULL, "button.gadget",
                     GA_ID, 3, GA_RelVerify, TRUE, GA_Text, (ULONG)"+ Aktuelle", TAG_DONE),
                 LAYOUT_AddChild, IIntuition->NewObject(NULL, "button.gadget",
-                    GA_ID, 4, GA_RelVerify, TRUE, GA_Text, (ULONG)"Loeschen", TAG_DONE),
+                    GA_ID, 4, GA_RelVerify, TRUE, GA_Text, (ULONG)"Löschen", TAG_DONE),
                 LAYOUT_AddChild, IIntuition->NewObject(NULL, "button.gadget",
-                    GA_ID, 5, GA_RelVerify, TRUE, GA_Text, (ULONG)"Schliessen", TAG_DONE),
+                    GA_ID, 5, GA_RelVerify, TRUE, GA_Text, (ULONG)"Schließen", TAG_DONE),
                 TAG_DONE),
             CHILD_WeightedHeight, 0,
             TAG_DONE),
@@ -885,7 +885,7 @@ bool gui_init(TtxApp *app) {
     }
 
     app->win_obj = IIntuition->NewObject(NULL, "window.class",
-        WA_Title,          (ULONG)"VortexTeletext - Copyright by TakiTo",
+        WA_Title,          (ULONG)"VortexTeletext - Copyright by TaKiTo",
         WA_Width,          560,
         WA_Height,         600,
         WA_MinWidth,       460,
@@ -973,7 +973,7 @@ bool gui_init(TtxApp *app) {
                     LAYOUT_AddChild, app->gadgets[GID_BTN_NEXT_SUB] = make_btn(GID_BTN_NEXT_SUB, "Unterseite vor"),
                     TAG_DONE),
 
-                /* Row 4: -1, 0, +1, Unterseite zurueck */
+                /* Row 4: -1, 0, +1, Unterseite zurück */
                 LAYOUT_AddChild, IIntuition->NewObject(NULL, "layout.gadget",
                     LAYOUT_Orientation, LAYOUT_ORIENT_HORIZ,
                     LAYOUT_EvenSize,    TRUE,
@@ -981,7 +981,7 @@ bool gui_init(TtxApp *app) {
                     LAYOUT_AddChild, app->gadgets[GID_BTN_PREV_PAGE] = make_btn(GID_BTN_PREV_PAGE, "-1"),
                     LAYOUT_AddChild, app->gadgets[GID_KEY_0]         = make_btn(GID_KEY_0, "0"),
                     LAYOUT_AddChild, app->gadgets[GID_BTN_NEXT_PAGE] = make_btn(GID_BTN_NEXT_PAGE, "+1"),
-                    LAYOUT_AddChild, app->gadgets[GID_BTN_PREV_SUB]  = make_btn(GID_BTN_PREV_SUB, "Unterseite zurueck"),
+                    LAYOUT_AddChild, app->gadgets[GID_BTN_PREV_SUB]  = make_btn(GID_BTN_PREV_SUB, "Unterseite zurück"),
                     TAG_DONE),
 
                 TAG_DONE),
@@ -1091,13 +1091,13 @@ static void handle_menu(TtxApp *app, ULONG mid) {
             gui_export_current(app, true);
             break;
         case MID_PROJ_ABOUT:
-            show_info_requester(app->win, "Ueber VortexTeletext",
+            show_info_requester(app->win, "Über VortexTeletext",
                 "VortexTeletext 1.0 (AmigaOS 4.1 PowerPC)\n"
-                "Copyright \xa9 2026 by TakiTo\n\n"
-                "Nativer Live-Teletext-Client fuer ARD, ZDF, 3SAT, HR, WDR, SWR, SR,\n"
-                "SRF/RTS/RSI (Schweiz) und ORF (Oesterreich).\n\n"
-                "Tasten: 0-9 Seite waehlen, +/- Seite hoch/runter,\n"
-                "Pfeile Navigation, R/F5 Neu laden, Backspace Zurueck,\n"
+                "Copyright \xa9 2026 by TaKiTo\n\n"
+                "Nativer Live-Teletext-Client für ARD, ZDF, 3SAT, HR, WDR, SWR, SR,\n"
+                "SRF/RTS/RSI (Schweiz) und ORF (Österreich).\n\n"
+                "Tasten: 0-9 Seite wählen, +/- Seite hoch/runter,\n"
+                "Pfeile Navigation, R/F5 Neu laden, Backspace Zurück,\n"
                 "F Suche, B Favoriten, S BMP-Export.");
             break;
         case MID_PROJ_QUIT:

@@ -1,6 +1,6 @@
 # VortexTeletext (AmigaOS 4.1 PowerPC)
 
-*Copyright © 2026 by TakiTo*
+*Copyright © 2026 by TaKiTo*
 
 *[English](#english) | [Deutsch](#deutsch)*
 
@@ -10,7 +10,7 @@
 ## English
 
 A native, standalone **Live Teletext Client** for **AmigaOS 4.1 PowerPC** (ReAction GUI + AmiSSL 4/5 HTTPS), inspired by **AmigaTText** and part of the Vortex suite.  
-**Copyright © 2026 by TakiTo**
+**Copyright © 2026 by TaKiTo**
 
 ### Supported Live Channels
 * **Germany**:
@@ -35,7 +35,7 @@ A native, standalone **Live Teletext Client** for **AmigaOS 4.1 PowerPC** (ReAct
     * Digits `0–9` with live input display (automatically loads once 3 digits are entered)
     * `Gehe zu`: jumps to the entered page number
     * `-1` / `+1`: previous / next page
-    * `Unterseite vor` / `Unterseite zurueck`: cycle through subpages
+    * `Unterseite vor` / `Unterseite zurück`: cycle through subpages
   * **"Seiten Nummer Auswahl" Bar**:
     * Direct page entry field (press `Enter` to load)
     * `Neu laden`: forces a fresh live download from the internet (bypassing the RAM cache)
@@ -85,7 +85,7 @@ This builds `VortexTeletext` and `VortexTeletext.stripped`.
 ## Deutsch
 
 Ein nativer, eigenständiger **Live-Teletext-Client** für **AmigaOS 4.1 PowerPC** (ReAction GUI + AmiSSL 4/5 HTTPS), inspiriert von **AmigaTText** und passend zur Vortex-Serie.  
-**Copyright © 2026 by TakiTo**
+**Copyright © 2026 by TaKiTo**
 
 ### Unterstützte Live-Sender
 * **Deutschland**:
@@ -110,7 +110,7 @@ Ein nativer, eigenständiger **Live-Teletext-Client** für **AmigaOS 4.1 PowerPC
     * Ziffern `0–9` mit Eingabeanzeige (lädt automatisch nach 3 eingegebenen Ziffern)
     * `Gehe zu`: springt zur eingegebenen Seitenzahl
     * `-1` / `+1`: vorherige / nächste Seite
-    * `Unterseite vor` / `Unterseite zurueck`: durch Unterseiten blättern
+    * `Unterseite vor` / `Unterseite zurück`: durch Unterseiten blättern
   * **„Seiten Nummer Auswahl“**:
     * Direkteingabefeld für Seitenzahlen (`Enter` lädt die Seite)
     * `Neu laden`: lädt die aktuelle Seite frisch aus dem Internet (umgeht den RAM-Cache)

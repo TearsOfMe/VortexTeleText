@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static const char * const USED ver_tag = "$VER: VortexTeletext 1.0 (14.11.2026) AmigaOS 4.1 PowerPC - Copyright by TakiTo";
+static const char * const USED ver_tag = "$VER: VortexTeletext 1.0 (14.11.2026) AmigaOS 4.1 PowerPC - Copyright by TaKiTo";
 static const char * const USED stack_cookie = "$STACK: 131072";
 
 int main(int argc, char **argv) {

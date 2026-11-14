@@ -18,7 +18,7 @@ const TtxChannel g_ttx_channels[TTX_MAX_CHANS] = {
     { "swrbw",    "SWR BW",      "bw",        TTX_SRC_SWR },
     { "sr",       "SR",          "sr",        TTX_SRC_SR  },
 
-    /* Auslaendische Teletext-Sender (Schweiz & Oesterreich, Index 8..18) */
+    /* Ausländische Teletext-Sender (Schweiz & Österreich, Index 8..18) */
     { "srf1",     "SRF 1 (CH)",  "SRF1",      TTX_SRC_SRF },
     { "srf2",     "SRF zwei",    "SRFzwei",   TTX_SRC_SRF },
     { "srfinfo",  "SRF info",    "SRFInfo",   TTX_SRC_SRF },
