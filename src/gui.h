@@ -59,6 +59,11 @@ typedef struct {
     Object          *gadgets[GID_MAX];
     struct List      chan_list;
 
+    Object          *fav_win_obj;
+    struct Window   *fav_win;
+    Object          *fav_lb;
+    struct List      fav_list;
+
     TtxPage          cur_page;
     TtxRenderer      renderer;
     TtxPrefs         prefs;

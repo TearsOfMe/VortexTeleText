@@ -551,18 +551,35 @@ static void rebuild_fav_list(struct List *list, const TtxFavorite *favs, int cou
     }
 }
 
-static void open_favorites_dialog(TtxApp *app) {
-    struct List fav_list;
-    IExec->NewList(&fav_list);
-    rebuild_fav_list(&fav_list, app->favs, app->fav_count);
+static void close_favorites_dialog(TtxApp *app) {
+    if (app->fav_win_obj) {
+        IIntuition->IDoMethod(app->fav_win_obj, WM_CLOSE, NULL);
+        IIntuition->DisposeObject(app->fav_win_obj);
+        app->fav_win_obj = NULL;
+        app->fav_win = NULL;
+        app->fav_lb = NULL;
+        IListBrowser->FreeListBrowserList(&app->fav_list);
+        IExec->NewList(&app->fav_list);
+    }
+}
 
-    Object *lb_fav = NULL;
-    Object *fwin_obj = IIntuition->NewObject(NULL, "window.class",
+static void open_favorites_dialog(TtxApp *app) {
+    if (app->fav_win_obj && app->fav_win) {
+        IIntuition->WindowToFront(app->fav_win);
+        IIntuition->ActivateWindow(app->fav_win);
+        return;
+    }
+
+    IExec->NewList(&app->fav_list);
+    rebuild_fav_list(&app->fav_list, app->favs, app->fav_count);
+
+    app->fav_win_obj = IIntuition->NewObject(NULL, "window.class",
         WA_Title,         (ULONG)"VortexTeletext - Favoriten",
         WA_Width,         420,
         WA_Height,        280,
         WA_DragBar,       TRUE,
         WA_DepthGadget,   TRUE,
+        WA_SizeGadget,    TRUE,
         WA_CloseGadget,   TRUE,
         WA_Activate,      TRUE,
         WINDOW_Position,  WPOS_CENTERWINDOW,
@@ -570,9 +587,9 @@ static void open_favorites_dialog(TtxApp *app) {
         WINDOW_Layout, IIntuition->NewObject(NULL, "layout.gadget",
             LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
             LAYOUT_SpaceOuter,  TRUE,
-            LAYOUT_AddChild, lb_fav = IIntuition->NewObject(NULL, "listbrowser.gadget",
+            LAYOUT_AddChild, app->fav_lb = IIntuition->NewObject(NULL, "listbrowser.gadget",
                 GA_ID, 1, GA_RelVerify, TRUE,
-                LISTBROWSER_Labels, (ULONG)&fav_list,
+                LISTBROWSER_Labels, (ULONG)&app->fav_list,
                 LISTBROWSER_ShowSelected, TRUE,
                 TAG_DONE),
             LAYOUT_AddChild, IIntuition->NewObject(NULL, "layout.gadget",
@@ -590,70 +607,78 @@ static void open_favorites_dialog(TtxApp *app) {
             TAG_DONE),
         TAG_DONE);
 
-    if (!fwin_obj) {
-        IListBrowser->FreeListBrowserList(&fav_list);
+    if (!app->fav_win_obj) {
+        IListBrowser->FreeListBrowserList(&app->fav_list);
+        IExec->NewList(&app->fav_list);
         return;
     }
-    struct Window *fwin = (struct Window *)IIntuition->IDoMethod(fwin_obj, WM_OPEN, NULL);
-    if (!fwin) {
-        IIntuition->DisposeObject(fwin_obj);
-        IListBrowser->FreeListBrowserList(&fav_list);
+    app->fav_win = (struct Window *)IIntuition->IDoMethod(app->fav_win_obj, WM_OPEN, NULL);
+    if (!app->fav_win) {
+        IIntuition->DisposeObject(app->fav_win_obj);
+        app->fav_win_obj = NULL;
+        app->fav_lb = NULL;
+        IListBrowser->FreeListBrowserList(&app->fav_list);
+        IExec->NewList(&app->fav_list);
         return;
     }
+}
 
-    bool done = false;
-    ULONG sigmask = 0;
-    IIntuition->GetAttr(WINDOW_SigMask, fwin_obj, &sigmask);
+static void handle_favorites_events(TtxApp *app) {
+    if (!app->fav_win_obj) return;
+    ULONG result;
+    WORD code;
+    bool close_fav = false;
 
-    while (!done) {
-        IExec->Wait(sigmask);
-        ULONG result;
-        WORD code;
-        while ((result = IIntuition->IDoMethod(fwin_obj, WM_HANDLEINPUT, &code)) != WMHI_LASTMSG) {
-            switch (result & WMHI_CLASSMASK) {
-                case WMHI_CLOSEWINDOW:
-                    done = true;
-                    break;
-                case WMHI_GADGETUP: {
-                    ULONG gid = result & WMHI_GADGETMASK;
-                    LONG sel = -1;
-                    IIntuition->GetAttr(LISTBROWSER_Selected, lb_fav, (ULONG *)&sel);
-                    if (gid == 2 && sel >= 0 && sel < app->fav_count) {
+    while (!close_fav &&
+           (result = IIntuition->IDoMethod(app->fav_win_obj, WM_HANDLEINPUT, &code)) != WMHI_LASTMSG) {
+        switch (result & WMHI_CLASSMASK) {
+            case WMHI_CLOSEWINDOW:
+                close_fav = true;
+                break;
+            case WMHI_GADGETUP: {
+                ULONG gid = result & WMHI_GADGETMASK;
+                LONG sel = -1;
+                IIntuition->GetAttr(LISTBROWSER_Selected, app->fav_lb, (ULONG *)&sel);
+                if (gid == 1) {
+                    ULONG rel = 0;
+                    IIntuition->GetAttr(LISTBROWSER_RelEvent, app->fav_lb, &rel);
+                    if ((rel & LBRE_DOUBLECLICK) && sel >= 0 && sel < app->fav_count) {
                         gui_load_page(app, app->favs[sel].channel_idx, app->favs[sel].page, 1, true, false);
-                        done = true;
-                    } else if (gid == 3) {
-                        char lbl[48];
-                        snprintf(lbl, sizeof(lbl), "%s Seite %d",
-                                 g_ttx_channels[app->cur_page.channel_idx].name, app->cur_page.page);
-                        if (favs_add(app->favs, &app->fav_count, TTX_MAX_FAVS,
-                                     app->cur_page.channel_idx, app->cur_page.page, lbl)) {
-                            favs_save(app->favs, app->fav_count);
-                            IIntuition->SetGadgetAttrs((struct Gadget *)lb_fav, fwin, NULL,
-                                                       LISTBROWSER_Labels, ~0, TAG_DONE);
-                            rebuild_fav_list(&fav_list, app->favs, app->fav_count);
-                            IIntuition->SetGadgetAttrs((struct Gadget *)lb_fav, fwin, NULL,
-                                                       LISTBROWSER_Labels, (ULONG)&fav_list, TAG_DONE);
-                        }
-                    } else if (gid == 4 && sel >= 0 && sel < app->fav_count) {
-                        favs_remove(app->favs, &app->fav_count, sel);
-                        favs_save(app->favs, app->fav_count);
-                        IIntuition->SetGadgetAttrs((struct Gadget *)lb_fav, fwin, NULL,
-                                                   LISTBROWSER_Labels, ~0, TAG_DONE);
-                        rebuild_fav_list(&fav_list, app->favs, app->fav_count);
-                        IIntuition->SetGadgetAttrs((struct Gadget *)lb_fav, fwin, NULL,
-                                                   LISTBROWSER_Labels, (ULONG)&fav_list, TAG_DONE);
-                    } else if (gid == 5) {
-                        done = true;
                     }
-                    break;
+                } else if (gid == 2 && sel >= 0 && sel < app->fav_count) {
+                    gui_load_page(app, app->favs[sel].channel_idx, app->favs[sel].page, 1, true, false);
+                } else if (gid == 3) {
+                    char lbl[48];
+                    snprintf(lbl, sizeof(lbl), "%s Seite %d",
+                             g_ttx_channels[app->cur_page.channel_idx].name, app->cur_page.page);
+                    if (favs_add(app->favs, &app->fav_count, TTX_MAX_FAVS,
+                                 app->cur_page.channel_idx, app->cur_page.page, lbl)) {
+                        favs_save(app->favs, app->fav_count);
+                        IIntuition->SetGadgetAttrs((struct Gadget *)app->fav_lb, app->fav_win, NULL,
+                                                   LISTBROWSER_Labels, ~0, TAG_DONE);
+                        rebuild_fav_list(&app->fav_list, app->favs, app->fav_count);
+                        IIntuition->SetGadgetAttrs((struct Gadget *)app->fav_lb, app->fav_win, NULL,
+                                                   LISTBROWSER_Labels, (ULONG)&app->fav_list, TAG_DONE);
+                    }
+                } else if (gid == 4 && sel >= 0 && sel < app->fav_count) {
+                    favs_remove(app->favs, &app->fav_count, sel);
+                    favs_save(app->favs, app->fav_count);
+                    IIntuition->SetGadgetAttrs((struct Gadget *)app->fav_lb, app->fav_win, NULL,
+                                               LISTBROWSER_Labels, ~0, TAG_DONE);
+                    rebuild_fav_list(&app->fav_list, app->favs, app->fav_count);
+                    IIntuition->SetGadgetAttrs((struct Gadget *)app->fav_lb, app->fav_win, NULL,
+                                               LISTBROWSER_Labels, (ULONG)&app->fav_list, TAG_DONE);
+                } else if (gid == 5) {
+                    close_fav = true;
                 }
+                break;
             }
         }
     }
 
-    IIntuition->IDoMethod(fwin_obj, WM_CLOSE, NULL);
-    IIntuition->DisposeObject(fwin_obj);
-    IListBrowser->FreeListBrowserList(&fav_list);
+    if (close_fav) {
+        close_favorites_dialog(app);
+    }
 }
 
 /* ============================================================================
@@ -872,6 +897,8 @@ void gui_cleanup(TtxApp *app) {
     prefs_save(&app->prefs);
     favs_save(app->favs, app->fav_count);
 
+    close_favorites_dialog(app);
+
     if (app->win_obj) {
         IIntuition->IDoMethod(app->win_obj, WM_CLOSE, NULL);
         IIntuition->DisposeObject(app->win_obj);
@@ -977,7 +1004,16 @@ void gui_run_loop(TtxApp *app) {
     IIntuition->GetAttr(WINDOW_SigMask, app->win_obj, &sigmask);
 
     while (app->running) {
-        IExec->Wait(sigmask);
+        ULONG wait_mask = sigmask;
+        if (app->fav_win_obj) {
+            ULONG fav_mask = 0;
+            IIntuition->GetAttr(WINDOW_SigMask, app->fav_win_obj, &fav_mask);
+            wait_mask |= fav_mask;
+        }
+        IExec->Wait(wait_mask);
+        if (app->fav_win_obj) {
+            handle_favorites_events(app);
+        }
         ULONG result;
         WORD code;
         while ((result = IIntuition->IDoMethod(app->win_obj, WM_HANDLEINPUT, &code)) != WMHI_LASTMSG) {
