@@ -1,5 +1,6 @@
 #include "teletext.h"
 #include "http_client.h"
+#include "charset.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -121,27 +122,7 @@ static int base64_decode(const char *src, int src_len, uint8_t *dst, int dst_max
 }
 
 static uint8_t utf8_to_latin1_char(const char *s, int *consumed) {
-    unsigned char b0 = (unsigned char)s[0];
-    if (b0 < 0x80) {
-        *consumed = 1;
-        return b0;
-    }
-    if ((b0 & 0xE0) == 0xC0 && s[1]) {
-        unsigned char b1 = (unsigned char)s[1];
-        *consumed = 2;
-        uint16_t cp = (uint16_t)(((b0 & 0x1F) << 6) | (b1 & 0x3F));
-        return (cp <= 0xFF) ? (uint8_t)cp : '?';
-    }
-    if ((b0 & 0xF0) == 0xE0 && s[1] && s[2]) {
-        *consumed = 3;
-        return ' ';
-    }
-    if ((b0 & 0xF8) == 0xF0 && s[1] && s[2] && s[3]) {
-        *consumed = 4;
-        return ' ';
-    }
-    *consumed = 1;
-    return '?';
+    return charset_utf8_char_to_local(s, consumed);
 }
 
 /* Extract JSON string value for a given key starting from `start` */
@@ -597,6 +578,19 @@ static uint8_t decode_html_entity(const char *ent, int *consumed) {
     if (strncmp(ent, "&Ouml;", 6) == 0)  return 0xD6;
     if (strncmp(ent, "&Uuml;", 6) == 0)  return 0xDC;
     if (strncmp(ent, "&szlig;", 7) == 0) return 0xDF;
+    if (strncmp(ent, "&eacute;", 8) == 0) return 0xE9;
+    if (strncmp(ent, "&egrave;", 8) == 0) return 0xE8;
+    if (strncmp(ent, "&agrave;", 8) == 0) return 0xE0;
+    if (strncmp(ent, "&aacute;", 8) == 0) return 0xE1;
+    if (strncmp(ent, "&acirc;", 7) == 0)  return 0xE2;
+    if (strncmp(ent, "&ccedil;", 8) == 0) return 0xE7;
+    if (strncmp(ent, "&ecirc;", 7) == 0)  return 0xEA;
+    if (strncmp(ent, "&euml;", 6) == 0)   return 0xEB;
+    if (strncmp(ent, "&icirc;", 7) == 0)  return 0xEE;
+    if (strncmp(ent, "&iuml;", 6) == 0)   return 0xEF;
+    if (strncmp(ent, "&ocirc;", 7) == 0)  return 0xF4;
+    if (strncmp(ent, "&ugrave;", 8) == 0) return 0xF9;
+    if (strncmp(ent, "&ucirc;", 7) == 0)  return 0xFB;
     if (strncmp(ent, "&deg;", 5) == 0)   return 0xB0;
     if (strncmp(ent, "&sect;", 6) == 0)  return 0xA7;
     if (strncmp(ent, "&euro;", 6) == 0)  return 'E';

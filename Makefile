@@ -20,6 +20,7 @@ CFLAGS   = $(OPTIMIZE) -Wall -Wextra -Wno-deprecated-declarations \
 LDFLAGS  = -L$(SDK)/local/newlib/lib -lauto
 
 SRCS = src/main.c \
+       src/charset.c \
        src/http_client.c \
        src/teletext.c \
        src/ttx_render.c \

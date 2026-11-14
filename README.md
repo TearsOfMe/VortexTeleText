@@ -1,5 +1,7 @@
 # VortexTeletext (AmigaOS 4.1 PowerPC)
 
+*Copyright © 2026 by TakiTo*
+
 *[English](#english) | [Deutsch](#deutsch)*
 
 ---
@@ -7,7 +9,8 @@
 <a id="english"></a>
 ## English
 
-A native, standalone **Live Teletext Client** for **AmigaOS 4.1 PowerPC** (ReAction GUI + AmiSSL 4/5 HTTPS), inspired by **AmigaTText** and part of the Vortex suite.
+A native, standalone **Live Teletext Client** for **AmigaOS 4.1 PowerPC** (ReAction GUI + AmiSSL 4/5 HTTPS), inspired by **AmigaTText** and part of the Vortex suite.  
+**Copyright © 2026 by TakiTo**
 
 ### Supported Live Channels
 * **Germany**:
@@ -37,6 +40,9 @@ A native, standalone **Live Teletext Client** for **AmigaOS 4.1 PowerPC** (ReAct
     * Direct page entry field (press `Enter` to load)
     * `Neu laden`: forces a fresh live download from the internet (bypassing the RAM cache)
     * Channel choosers (German channels: `ARD`, `ZDF`, `3SAT`, `HR`, `WDR`, `SWR RP`, `SWR BW`, `SR`; International channels: `SRF 1/2/Info`, `RTS 1/2`, `RSI 1/2`, `ORF 1/2/III/Sport+`)
+  * **Clean Codepage & Umlaut Support (`codesets.library`)**:
+    * Full UTF-8 to Amiga Latin-1 (ISO-8859-1) translation via `codesets.library` with automatic fallback.
+    * Proper display of German umlauts (`ä`, `ö`, `ü`, `Ä`, `Ö`, `Ü`, `ß`), French/Italian accents (`é`, `è`, `à`, `ç`, etc.), and special symbols (`°`, `§`, `«`, `»`, `€`).
 * **Mouse & Keyboard Shortcuts**:
   * **Mouse Wheel**: smooth zoom (`100%–300%`) while hovering over the Teletext display (Middle-click or `Amiga+0` resets zoom)
   * **Fit to Window Width** (`Funktionen -> An Fensterbreite anpassen`): scales the Teletext display to the exact window width (enabled by default, saved in prefs)
@@ -58,6 +64,7 @@ A native, standalone **Live Teletext Client** for **AmigaOS 4.1 PowerPC** (ReAct
 ### Requirements (AmigaOS 4.1)
 * AmigaOS 4.1 Update 2 or newer (PowerPC)
 * AmiSSL v4 or v5 (`amisslmaster.library`) for HTTPS connections
+* `codesets.library` (v5/v6) for codepage conversion and proper umlauts
 * Active internet connection
 
 ### Installation (AmigaOS 4.1)
@@ -77,7 +84,8 @@ This builds `VortexTeletext` and `VortexTeletext.stripped`.
 <a id="deutsch"></a>
 ## Deutsch
 
-Ein nativer, eigenständiger **Live-Teletext-Client** für **AmigaOS 4.1 PowerPC** (ReAction GUI + AmiSSL 4/5 HTTPS), inspiriert von **AmigaTText** und passend zur Vortex-Serie.
+Ein nativer, eigenständiger **Live-Teletext-Client** für **AmigaOS 4.1 PowerPC** (ReAction GUI + AmiSSL 4/5 HTTPS), inspiriert von **AmigaTText** und passend zur Vortex-Serie.  
+**Copyright © 2026 by TakiTo**
 
 ### Unterstützte Live-Sender
 * **Deutschland**:
@@ -107,6 +115,9 @@ Ein nativer, eigenständiger **Live-Teletext-Client** für **AmigaOS 4.1 PowerPC
     * Direkteingabefeld für Seitenzahlen (`Enter` lädt die Seite)
     * `Neu laden`: lädt die aktuelle Seite frisch aus dem Internet (umgeht den RAM-Cache)
     * Sender-Auswahlmenüs (Deutsche Sender: `ARD`, `ZDF`, `3SAT`, `HR`, `WDR`, `SWR RP`, `SWR BW`, `SR`; Ausländische Sender: `SRF 1/2/Info`, `RTS 1/2`, `RSI 1/2`, `ORF 1/2/III/Sport+`)
+  * **Saubere Codepages & Umlaute (`codesets.library`)**:
+    * Zuverlässige UTF-8 zu Amiga Latin-1 (ISO-8859-1) Konvertierung über `codesets.library` (mit automatischem Fallback).
+    * Korrekte Darstellung von deutschen Umlauten (`ä`, `ö`, `ü`, `Ä`, `Ö`, `Ü`, `ß`), französischen/italienischen Sonderzeichen (`é`, `è`, `à`, `ç` usw.) und Teletext-Sonderzeichen (`°`, `§`, `«`, `»`, `€`).
 * **Maus- & Tastatursteuerung**:
   * **Mausrad**: stufenloser Zoom (`100%–300%`) über der Teletext-Anzeige (Mittelklick oder `Amiga+0` setzt Zoom zurück)
   * **An Fensterbreite anpassen** (`Funktionen -> An Fensterbreite anpassen`): skaliert die Teletext-Anzeige exakt auf die Fensterbreite (Standard aktiv, gespeichert in Prefs)
@@ -128,6 +139,7 @@ Ein nativer, eigenständiger **Live-Teletext-Client** für **AmigaOS 4.1 PowerPC
 ### Voraussetzungen (AmigaOS 4.1)
 * AmigaOS 4.1 Update 2 oder neuer (PowerPC)
 * AmiSSL v4 oder v5 (`amisslmaster.library`) für HTTPS-Verbindungen
+* `codesets.library` (v5/v6) für Zeichensatz-Konvertierung und saubere Umlaute
 * Aktive Internetverbindung
 
 ### Installation auf AmigaOS 4.1

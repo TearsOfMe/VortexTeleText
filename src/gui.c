@@ -885,7 +885,7 @@ bool gui_init(TtxApp *app) {
     }
 
     app->win_obj = IIntuition->NewObject(NULL, "window.class",
-        WA_Title,          (ULONG)"VortexTeletext",
+        WA_Title,          (ULONG)"VortexTeletext - Copyright by TakiTo",
         WA_Width,          560,
         WA_Height,         600,
         WA_MinWidth,       460,
@@ -1092,8 +1092,10 @@ static void handle_menu(TtxApp *app, ULONG mid) {
             break;
         case MID_PROJ_ABOUT:
             show_info_requester(app->win, "Ueber VortexTeletext",
-                "VortexTeletext 1.0 (AmigaOS 4.1 PowerPC)\n\n"
-                "Nativer Live-Teletext-Client fuer ARD, ZDF, 3SAT, HR, WDR & SWR.\n"
+                "VortexTeletext 1.0 (AmigaOS 4.1 PowerPC)\n"
+                "Copyright \xa9 2026 by TakiTo\n\n"
+                "Nativer Live-Teletext-Client fuer ARD, ZDF, 3SAT, HR, WDR, SWR, SR,\n"
+                "SRF/RTS/RSI (Schweiz) und ORF (Oesterreich).\n\n"
                 "Tasten: 0-9 Seite waehlen, +/- Seite hoch/runter,\n"
                 "Pfeile Navigation, R/F5 Neu laden, Backspace Zurueck,\n"
                 "F Suche, B Favoriten, S BMP-Export.");
